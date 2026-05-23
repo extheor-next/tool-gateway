@@ -6,11 +6,11 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"ds2api/internal/chathistory"
-	"ds2api/internal/config"
-	dsprotocol "ds2api/internal/deepseek/protocol"
-	"ds2api/internal/textclean"
-	"ds2api/internal/util"
+	"tool-gateway/internal/chathistory"
+	"tool-gateway/internal/config"
+	dsprotocol "tool-gateway/internal/deepseek/protocol"
+	"tool-gateway/internal/textclean"
+	"tool-gateway/internal/util"
 )
 
 // writeJSON is a package-internal alias to avoid mass-renaming all call-sites.

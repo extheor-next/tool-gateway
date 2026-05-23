@@ -1,7 +1,7 @@
 services:
-  ds2api:
-    image: ghcr.io/cjackhwang/ds2api:latest
-    container_name: ds2api
+  tool-gateway:
+    image: ghcr.io/cjackhwang/tool-gateway:latest
+    container_name: tool-gateway
     restart: always
     env_file:
       - .env
@@ -13,5 +13,5 @@ services:
     environment:
       - TZ=Asia/Shanghai
       - LOG_LEVEL=INFO
-      - TOOL_GATEWAY_ADMIN_KEY=${TOOL_GATEWAY_ADMIN_KEY:-ds2api}
+      - TOOL_GATEWAY_ADMIN_KEY=${TOOL_GATEWAY_ADMIN_KEY:-tool-gateway}
       - TOOL_GATEWAY_CONFIG_PATH=/data/config.json

@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"ds2api/internal/config"
+	"tool-gateway/internal/config"
 )
 
 // ─── Pool edge cases ─────────────────────────────────────────────────

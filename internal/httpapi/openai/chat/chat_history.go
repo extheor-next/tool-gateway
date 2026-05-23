@@ -6,12 +6,12 @@ import (
 	"strings"
 	"time"
 
-	"ds2api/internal/auth"
-	"ds2api/internal/chathistory"
-	"ds2api/internal/config"
-	openaifmt "ds2api/internal/format/openai"
-	"ds2api/internal/prompt"
-	"ds2api/internal/promptcompat"
+	"tool-gateway/internal/auth"
+	"tool-gateway/internal/chathistory"
+	"tool-gateway/internal/config"
+	openaifmt "tool-gateway/internal/format/openai"
+	"tool-gateway/internal/prompt"
+	"tool-gateway/internal/promptcompat"
 )
 
 type chatHistorySession struct {

@@ -1,7 +1,7 @@
 package toolstream
 
 import (
-	"ds2api/internal/toolcall"
+	"tool-gateway/internal/toolcall"
 	"strings"
 )
 

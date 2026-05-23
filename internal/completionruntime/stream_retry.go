@@ -6,12 +6,12 @@ import (
 	"net/http"
 	"strings"
 
-	"ds2api/internal/assistantturn"
-	"ds2api/internal/auth"
-	"ds2api/internal/config"
-	"ds2api/internal/httpapi/openai/history"
-	"ds2api/internal/httpapi/openai/shared"
-	"ds2api/internal/promptcompat"
+	"tool-gateway/internal/assistantturn"
+	"tool-gateway/internal/auth"
+	"tool-gateway/internal/config"
+	"tool-gateway/internal/httpapi/openai/history"
+	"tool-gateway/internal/httpapi/openai/shared"
+	"tool-gateway/internal/promptcompat"
 )
 
 type StreamRetryOptions struct {

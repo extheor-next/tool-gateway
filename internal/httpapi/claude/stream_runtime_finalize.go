@@ -1,16 +1,16 @@
 package claude
 
 import (
-	"ds2api/internal/assistantturn"
-	"ds2api/internal/responsehistory"
-	"ds2api/internal/sse"
-	"ds2api/internal/toolcall"
-	"ds2api/internal/toolstream"
+	"tool-gateway/internal/assistantturn"
+	"tool-gateway/internal/responsehistory"
+	"tool-gateway/internal/sse"
+	"tool-gateway/internal/toolcall"
+	"tool-gateway/internal/toolstream"
 	"encoding/json"
 	"fmt"
 	"time"
 
-	streamengine "ds2api/internal/stream"
+	streamengine "tool-gateway/internal/stream"
 )
 
 func (s *claudeStreamRuntime) closeThinkingBlock() {

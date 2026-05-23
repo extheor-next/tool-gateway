@@ -4,9 +4,9 @@ import (
 	"net/http"
 	"strings"
 
-	authn "ds2api/internal/auth"
-	"ds2api/internal/config"
-	"ds2api/internal/promptcompat"
+	authn "tool-gateway/internal/auth"
+	"tool-gateway/internal/config"
+	"tool-gateway/internal/promptcompat"
 )
 
 func (h *Handler) getSettings(w http.ResponseWriter, _ *http.Request) {

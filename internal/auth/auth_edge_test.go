@@ -6,8 +6,8 @@ import (
 	"net/http"
 	"testing"
 
-	"ds2api/internal/account"
-	"ds2api/internal/config"
+	"tool-gateway/internal/account"
+	"tool-gateway/internal/config"
 )
 
 // ─── extractCallerToken edge cases ───────────────────────────────────

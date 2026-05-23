@@ -3,8 +3,8 @@ package app
 import (
 	"net/http"
 
-	"ds2api/internal/config"
-	"ds2api/internal/server"
+	"tool-gateway/internal/config"
+	"tool-gateway/internal/server"
 )
 
 func NewHandler() http.Handler {

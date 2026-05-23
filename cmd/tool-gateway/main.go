@@ -11,10 +11,10 @@ import (
 	"syscall"
 	"time"
 
-	"ds2api/internal/auth"
-	"ds2api/internal/config"
-	"ds2api/internal/server"
-	"ds2api/internal/webui"
+	"tool-gateway/internal/auth"
+	"tool-gateway/internal/config"
+	"tool-gateway/internal/server"
+	"tool-gateway/internal/webui"
 )
 
 func main() {
@@ -49,9 +49,9 @@ func main() {
 	// Start server in a goroutine so we can listen for shutdown signals.
 	go func() {
 		if lanURL != "" {
-			config.Logger.Info("starting ds2api", "bind", srv.Addr, "port", port, "local_url", localURL, "lan_url", lanURL, "lan_ip", lanIP)
+			config.Logger.Info("starting tool-gateway", "bind", srv.Addr, "port", port, "local_url", localURL, "lan_url", lanURL, "lan_ip", lanIP)
 		} else {
-			config.Logger.Info("starting ds2api", "bind", srv.Addr, "port", port, "local_url", localURL)
+			config.Logger.Info("starting tool-gateway", "bind", srv.Addr, "port", port, "local_url", localURL)
 			config.Logger.Warn("lan ip not detected; check active network interfaces")
 		}
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {

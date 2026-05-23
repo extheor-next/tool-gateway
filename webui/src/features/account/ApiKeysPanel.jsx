@@ -31,8 +31,6 @@ function fallbackCopyText(text) {
 export default function ApiKeysPanel({
     t,
     config,
-    keysExpanded,
-    setKeysExpanded,
     onAddKey,
     onEditKey,
     copiedKey,
@@ -40,6 +38,7 @@ export default function ApiKeysPanel({
     onDeleteKey,
 }) {
     const [failedKey, setFailedKey] = useState(null)
+    const [keysExpanded, setKeysExpanded] = useState(true)
     const apiKeys = Array.isArray(config?.api_keys) && config.api_keys.length > 0
         ? config.api_keys
         : (config?.keys || []).map(key => ({ key, name: '', remark: '' }))

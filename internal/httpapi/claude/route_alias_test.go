@@ -7,7 +7,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"ds2api/internal/auth"
+	"tool-gateway/internal/auth"
 )
 
 type routeAliasAuthStub struct{}

@@ -3,7 +3,7 @@ package claude
 import (
 	"testing"
 
-	"ds2api/internal/config"
+	"tool-gateway/internal/config"
 )
 
 func TestNormalizeClaudeRequest(t *testing.T) {

@@ -4,7 +4,7 @@ import (
 	"net/http"
 	"strings"
 
-	"ds2api/internal/config"
+	"tool-gateway/internal/config"
 )
 
 func (h *Handler) getConfig(w http.ResponseWriter, _ *http.Request) {
@@ -13,6 +13,8 @@ func (h *Handler) getConfig(w http.ResponseWriter, _ *http.Request) {
 		"keys":                  snap.Keys,
 		"api_keys":              snap.APIKeys,
 		"accounts":              []map[string]any{},
+		"external_ai":           safeExternalAI(snap.ExternalAI),
+		"external_ai_providers": safeExternalAIProviders(snap.ExternalAIProviders),
 		"proxies":               []map[string]any{},
 		"env_backed":            h.Store.IsEnvBacked(),
 		"env_source_present":    h.Store.HasEnvConfigSource(),
@@ -57,6 +59,55 @@ func (h *Handler) getConfig(w http.ResponseWriter, _ *http.Request) {
 	}
 	safe["proxies"] = proxies
 	writeJSON(w, http.StatusOK, safe)
+}
+
+func safeExternalAI(cfg config.ExternalAIConfig) map[string]any {
+	apiKey := strings.TrimSpace(cfg.APIKey)
+	return map[string]any{
+		"base_url":        strings.TrimSpace(cfg.BaseURL),
+		"api_key":         apiKey,
+		"model":           strings.TrimSpace(cfg.Model),
+		"mode":            normalizeExternalAIMode(cfg.Mode),
+		"headers":         cfg.Headers,
+		"max_inflight":    cfg.MaxInflight,
+		"max_queue":       cfg.MaxQueue,
+		"has_api_key":     apiKey != "",
+		"api_key_preview": maskSecretPreview(apiKey),
+	}
+}
+
+func safeExternalAIProviders(cfg config.ExternalAIProvidersConfig) map[string]any {
+	cfg = config.NormalizeExternalAIProvidersConfig(cfg)
+	providers := make([]map[string]any, 0, len(cfg.Providers))
+	for _, provider := range cfg.Providers {
+		apiKey := strings.TrimSpace(provider.APIKey)
+		providers = append(providers, map[string]any{
+			"id":              strings.TrimSpace(provider.ID),
+			"name":            strings.TrimSpace(provider.Name),
+			"base_url":        strings.TrimSpace(provider.BaseURL),
+			"model":           strings.TrimSpace(provider.Model),
+			"mode":            normalizeExternalAIMode(provider.Mode),
+			"headers":         provider.Headers,
+			"max_inflight":    provider.MaxInflight,
+			"max_queue":       provider.MaxQueue,
+			"has_api_key":     apiKey != "",
+			"api_key_preview": maskSecretPreview(apiKey),
+		})
+	}
+	return map[string]any{
+		"active":    cfg.Active,
+		"providers": providers,
+	}
+}
+
+func normalizeExternalAIMode(mode string) string {
+	mode = strings.ToLower(strings.TrimSpace(mode))
+	switch mode {
+	case "openai", "claude", "gemini":
+		return mode
+	default:
+		return "auto"
+	}
 }
 
 func (h *Handler) exportConfig(w http.ResponseWriter, _ *http.Request) {

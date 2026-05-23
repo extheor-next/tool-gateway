@@ -9,11 +9,11 @@ import (
 	"testing"
 	"time"
 
-	"ds2api/internal/account"
-	"ds2api/internal/auth"
-	"ds2api/internal/config"
-	dsclient "ds2api/internal/deepseek/client"
-	"ds2api/internal/promptcompat"
+	"tool-gateway/internal/account"
+	"tool-gateway/internal/auth"
+	"tool-gateway/internal/config"
+	dsclient "tool-gateway/internal/deepseek/client"
+	"tool-gateway/internal/promptcompat"
 )
 
 func TestIsVercelStreamPrepareRequest(t *testing.T) {

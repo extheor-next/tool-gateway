@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * DS2API 启动脚本 - 交互式菜单
+ * Tool Gateway 启动脚本 - 交互式菜单
  *
  * 使用方法:
  *   node start.mjs          # 显示交互式菜单
@@ -26,7 +26,7 @@ const __dirname = dirname(__filename);
 const isWindows = process.platform === 'win32';
 
 // 编译产物路径
-const BINARY = join(__dirname, isWindows ? 'ds2api.exe' : 'ds2api');
+const BINARY = join(__dirname, isWindows ? 'tool-gateway.exe' : 'tool-gateway');
 
 // 配置（从环境变量读取，与 Go 主程序保持一致）
 const CONFIG = {
@@ -357,7 +357,7 @@ async function showMenu() {
 
   console.clear();
   log.title('╔══════════════════════════════════════════╗');
-  log.title('║         DS2API 启动脚本  (Go)            ║');
+  log.title('║         Tool Gateway 启动脚本  (Go)            ║');
   log.title('╚══════════════════════════════════════════╝');
 
   // 环境状态
@@ -532,7 +532,7 @@ async function main() {
     case '-h':
     case '--help':
       console.log(`
-${colors.bright}DS2API 启动脚本 (Go)${colors.reset}
+${colors.bright}Tool Gateway 启动脚本 (Go)${colors.reset}
 
 ${colors.cyan}使用方法:${colors.reset}
   node start.mjs              显示交互式菜单

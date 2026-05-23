@@ -2,17 +2,13 @@ import { Bot, Loader2, Send, Square, User, Zap, Paperclip, X, FileIcon } from 'l
 import clsx from 'clsx'
 import { useRef, useState } from 'react'
 
-import { getAttachedFileAccountIds } from './fileAccountBinding'
-
 export default function ChatPanel({
     t,
     message,
     setMessage,
     attachedFiles = [],
     setAttachedFiles,
-    setSelectedAccount,
     effectiveKey,
-    selectedAccount,
     model,
     onMessage,
     response,
@@ -37,9 +33,7 @@ export default function ChatPanel({
         }
 
         setUploadingFiles(true)
-        const initialSelectedAccount = String(selectedAccount || '').trim()
         const selectedModel = String(model || '').trim()
-        let boundAccount = initialSelectedAccount
         for (const file of files) {
             const formData = new FormData()
             formData.append('file', file)
@@ -50,9 +44,6 @@ export default function ChatPanel({
 
             const headers = {
                 'Authorization': `Bearer ${effectiveKey}`,
-            }
-            if (boundAccount) {
-                headers['X-Tool-Gateway-Target-Account'] = boundAccount
             }
 
             try {
@@ -68,18 +59,11 @@ export default function ChatPanel({
                 }
                 const data = await res.json()
                 setAttachedFiles(prev => [...prev, data])
-                const uploadedAccount = String(data?.account_id || '').trim()
-                if (!boundAccount && uploadedAccount) {
-                    boundAccount = uploadedAccount
-                }
             } catch (error) {
                 onMessage('error', error.message || 'Network error during upload')
             }
         }
         setUploadingFiles(false)
-        if (!initialSelectedAccount && boundAccount && setSelectedAccount) {
-            setSelectedAccount(boundAccount)
-        }
         if (fileInputRef.current) {
             fileInputRef.current.value = ''
         }
@@ -89,8 +73,6 @@ export default function ChatPanel({
         setAttachedFiles(prev => prev.filter(f => f.id !== id))
     }
 
-    const attachmentAccountIds = getAttachedFileAccountIds(attachedFiles)
-    const attachmentAccountId = attachmentAccountIds.length === 1 ? attachmentAccountIds[0] : ''
     return (
         <div className="lg:col-span-9 flex flex-col bg-card border border-border rounded-xl shadow-sm overflow-hidden min-h-0 flex-1 relative">
             <div className="flex-1 overflow-y-auto p-4 lg:p-6 space-y-8 custom-scrollbar scroll-smooth">
@@ -164,16 +146,6 @@ export default function ChatPanel({
                                 </button>
                             </div>
                         ))}
-                    </div>
-                )}
-                {attachmentAccountIds.length > 1 && (
-                    <div className="max-w-4xl mx-auto mb-3 text-[11px] text-amber-600">
-                        {t('apiTester.fileAccountConflict')}
-                    </div>
-                )}
-                {attachmentAccountId && (
-                    <div className="max-w-4xl mx-auto mb-3 text-[11px] text-muted-foreground">
-                        {t('apiTester.attachmentAccountHint', { account: attachmentAccountId })}
                     </div>
                 )}
                 <div className="max-w-4xl mx-auto relative group">

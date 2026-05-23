@@ -8,12 +8,12 @@
 #   docker-compose -f docker-compose.dev.yml up
 
 services:
-  ds2api:
+  tool-gateway:
     build:
       context: .
       target: go-builder
-    image: ds2api:dev
-    container_name: ds2api-dev
+    image: tool-gateway:dev
+    container_name: tool-gateway-dev
     command: ["go", "run", "./cmd/tool-gateway"]
     ports:
       # Host port is configurable via TOOL_GATEWAY_HOST_PORT; container port stays fixed at 5001.

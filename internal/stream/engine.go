@@ -5,7 +5,7 @@ import (
 	"io"
 	"time"
 
-	"ds2api/internal/sse"
+	"tool-gateway/internal/sse"
 )
 
 type StopReason string

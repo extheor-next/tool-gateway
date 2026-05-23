@@ -7,10 +7,10 @@ import (
 	"strings"
 	"testing"
 
-	"ds2api/internal/account"
-	"ds2api/internal/auth"
-	"ds2api/internal/config"
-	"ds2api/internal/httpapi/openai/shared"
+	"tool-gateway/internal/account"
+	"tool-gateway/internal/auth"
+	"tool-gateway/internal/config"
+	"tool-gateway/internal/httpapi/openai/shared"
 )
 
 func TestExecuteStreamWithRetryUsesSharedRetryPayloadAndUsagePrompt(t *testing.T) {

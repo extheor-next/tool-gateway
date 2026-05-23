@@ -4,7 +4,7 @@ import (
 	"net/http"
 	"testing"
 
-	"ds2api/internal/config"
+	"tool-gateway/internal/config"
 )
 
 func TestJWTCreateVerify(t *testing.T) {

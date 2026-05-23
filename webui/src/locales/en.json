@@ -32,6 +32,10 @@
         "settings": {
             "label": "Settings",
             "desc": "Edit runtime and security settings online"
+        },
+        "providers": {
+            "label": "Providers",
+            "desc": "Configure the external AI model provider used by Tool Gateway"
         }
     },
     "sidebar": {
@@ -42,7 +46,8 @@
         "keys": "Keys",
         "signOut": "Sign out",
         "version": "Version",
-        "updateAvailable": "Update available: {latest}"
+        "updateAvailable": "Update available: {latest}",
+        "providers": "Providers"
     },
     "auth": {
         "expired": "Authentication expired. Please sign in again.",
@@ -54,10 +59,12 @@
     "actions": {
         "cancel": "Cancel",
         "add": "Add",
+        "edit": "Edit",
         "delete": "Delete",
         "copy": "Copy",
         "generate": "Generate",
         "test": "Refresh token",
+        "refresh": "Refresh",
         "testing": "Refreshing...",
         "loading": "Loading..."
     },
@@ -230,7 +237,7 @@
         "missingApiKey": "Please provide an API key.",
         "requestFailed": "Request failed.",
         "networkError": "Network error: {error}",
-        "requestSuccess": "{account}: Request successful ({time}ms)",
+        "requestSuccess": "Provider request successful ({time}ms)",
         "testSuccess": "{account}: Token refresh successful ({time}ms)",
         "config": "Configuration",
         "modelLabel": "Model",
@@ -248,14 +255,53 @@
         "apiKeyPlaceholder": "Enter a custom key",
         "modeManaged": "Managed key mode (uses account pool).",
         "modeDirect": "Custom API key mode (must be configured in the gateway key list).",
-        "attachmentAccountHint": "Attached files are bound to account {account}. Sending will reuse the same account.",
-        "fileAccountConflict": "Attached files came from different accounts. Clear them and upload again under one account.",
-        "fileAccountMismatch": "The selected account does not match the attachment account. Switch to the bound account or clear the attachments and try again.",
         "statusError": "Error",
         "reasoningTrace": "Reasoning Trace",
         "generating": "Generating response...",
         "enterMessage": "Enter a message...",
-        "adminConsoleLabel": "Tool Gateway admin console"
+        "adminConsoleLabel": "Tool Gateway admin console",
+        "providerManager": {
+            "title": "External AI Providers",
+            "description": "Manage multiple upstream AI providers and choose the active one.",
+            "addProvider": "Add provider",
+            "editProvider": "Edit provider",
+            "save": "Save provider",
+            "saving": "Saving...",
+            "deleteConfirm": "Delete this provider?",
+            "activeBadge": "Active",
+            "setActive": "Set active",
+            "emptyTitle": "No providers configured",
+            "emptyDesc": "Add at least one external AI provider to route runtime requests.",
+            "nameLabel": "Name",
+            "namePlaceholder": "e.g. OpenAI Main",
+            "urlLabel": "Base URL",
+            "urlHelp": "OpenAI-compatible upstream API endpoint.",
+            "apiKeyLabel": "API Key",
+            "keepKeyHint": "Leave blank to keep the existing key.",
+            "keepKeyPlaceholder": "Leave blank to keep existing key",
+            "modelLabel": "Model",
+            "modelHelp": "Default model for this provider.",
+            "modeLabel": "Mode",
+            "headersLabel": "Headers",
+            "headersHelp": "One header per line in the format Key: Value.",
+            "maxInflightLabel": "Max inflight",
+            "maxInflightHelp": "Maximum concurrent requests allowed for this provider. 0 means unlimited.",
+            "maxInflightShort": "Inflight",
+            "maxQueueLabel": "Max queue",
+            "maxQueueHelp": "How many requests may wait when this provider is at capacity. 0 means no queue.",
+            "maxQueueShort": "Queue",
+            "unlimited": "Unlimited",
+            "requiredFields": "Base URL is required.",
+            "modes": {
+                "auto": "Auto",
+                "openai": "OpenAI",
+                "claude": "Claude",
+                "gemini": "Gemini"
+            },
+            "detectedMode": "Detected: {mode}",
+            "detectedUnknown": "Detected: Auto",
+            "keyPreview": "Stored key: {preview}"
+        }
     },
     "chatHistory": {
         "loading": "Loading conversation history...",
@@ -330,16 +376,16 @@
     "batchImport": {
         "templates": {
             "full": {
-                "name": "Full configuration template",
-                "desc": "Loaded from config.example.json with keys, accounts, and defaults"
+                "name": "Full gateway configuration",
+                "desc": "Loaded from config.example.json with API keys, external_ai, and runtime defaults"
             },
-            "emailOnly": {
-                "name": "Email-only accounts",
-                "desc": "Batch import accounts using email login"
+            "providerOpenAI": {
+                "name": "OpenAI provider",
+                "desc": "Configure a gateway key and an OpenAI-compatible upstream provider"
             },
-            "mobileOnly": {
-                "name": "Mobile-only accounts",
-                "desc": "Batch import accounts using mobile login"
+            "providerClaude": {
+                "name": "Claude provider",
+                "desc": "Configure a gateway key and a Claude-compatible upstream provider"
             },
             "keysOnly": {
                 "name": "API keys only",
@@ -347,7 +393,7 @@
             }
         },
         "enterJson": "Please provide JSON configuration content.",
-        "importSuccess": "Import successful: {keys} keys, {accounts} accounts",
+        "importSuccess": "Import successful: {keys} keys, {accounts} accounts, {provider} provider configs",
         "templateLoaded": "Template loaded: {name}",
         "currentConfigLoaded": "Current configuration loaded.",
         "fetchConfigFailed": "Failed to fetch configuration.",
@@ -363,7 +409,7 @@
         "applyConfig": "Apply config",
         "importing": "Importing...",
         "importComplete": "Import complete",
-        "importSummary": "Imported {keys} API keys and updated {accounts} accounts."
+        "importSummary": "Imported {keys} API keys, updated {accounts} accounts, and applied {provider} provider configs."
     },
     "settings": {
         "loadFailed": "Failed to load settings.",
@@ -443,7 +489,7 @@
         "rememberSession": "Remember this session",
         "signIn": "Sign in",
         "secureConnection": "Secure connection",
-        "adminPortal": "DS2API admin portal",
+        "adminPortal": "Tool Gateway admin portal",
         "signInFailed": "Sign-in failed.",
         "networkError": "Network error: {error}"
     },
@@ -483,6 +529,44 @@
             "two": "The JSON is Base64-encoded for safe formatting.",
             "three": "Update the env var in Vercel:",
             "four": "Trigger a redeploy to apply the updated environment variables."
+        }
+    },
+    "providerManager": {
+        "title": "External AI Providers",
+        "description": "Manage multiple upstream AI providers and choose the active one.",
+        "addProvider": "Add provider",
+        "editProvider": "Edit provider",
+        "save": "Save provider",
+        "saving": "Saving...",
+        "saveSuccess": "Provider configuration saved.",
+        "deleteConfirm": "Delete this provider?",
+        "activeBadge": "Active",
+        "setActive": "Set active",
+        "emptyTitle": "No providers configured",
+        "emptyDesc": "Add at least one external AI provider to route runtime requests.",
+        "nameLabel": "Name",
+        "namePlaceholder": "e.g. OpenAI Main",
+        "urlLabel": "Base URL",
+        "urlHelp": "Use the provider base URL, for example https://api.openai.com/v1.",
+        "apiKeyLabel": "API Key",
+        "apiKeyHelp": "Stored in config.external_ai.api_key and used only for upstream requests.",
+        "keepKeyHint": "Leave blank to keep the existing key.",
+        "keepKeyPlaceholder": "Leave blank to keep existing key",
+        "keyPreview": "Stored key: {preview}",
+        "modeLabel": "Mode",
+        "modelLabel": "Model",
+        "modelHelp": "Default model for this provider.",
+        "headersLabel": "Headers",
+        "headersHelp": "One header per line in the format Key: Value.",
+        "requiredFields": "Base URL is required.",
+        "detectedMode": "Detected: {mode}",
+        "detectedUnknown": "Detected: Auto",
+        "modalTitle": "Configure provider",
+        "modes": {
+            "auto": "Auto",
+            "openai": "OpenAI",
+            "claude": "Claude",
+            "gemini": "Gemini"
         }
     }
 }

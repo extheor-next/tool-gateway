@@ -22,10 +22,7 @@ export default function ConfigPanel({
     modelsLoaded,
     streamingMode,
     setStreamingMode,
-    selectedAccount,
-    setSelectedAccount,
-    accounts,
-    resolveAccountIdentifier,
+    provider,
     apiKey,
     setApiKey,
     config,
@@ -143,25 +140,14 @@ export default function ConfigPanel({
                     </div>
 
                     <div className="space-y-2 shrink-0">
-                        <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider ml-0.5">{t('apiTester.accountSelector')}</label>
-                        <div className="relative">
-                            <select
-                                className="w-full h-10 pl-3 pr-8 bg-secondary border border-border rounded-lg text-sm appearance-none focus:outline-none focus:ring-1 focus:ring-ring focus:border-ring transition-all cursor-pointer hover:bg-muted"
-                                value={selectedAccount}
-                                onChange={e => setSelectedAccount(e.target.value)}
-                            >
-                                <option value="" className="bg-popover text-popover-foreground">{t('apiTester.autoRandom')}</option>
-                                {accounts.map((acc, i) => {
-                                    const id = resolveAccountIdentifier(acc)
-                                    if (!id) return null
-                                    return (
-                                        <option key={i} value={id} className="bg-popover text-popover-foreground">
-                                            👤 {id}
-                                        </option>
-                                    )
-                                })}
-                            </select>
-                            <ChevronDown className="absolute right-2.5 top-3 w-4 h-4 text-muted-foreground pointer-events-none" />
+                        <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider ml-0.5">{t('apiTester.providerLabel')}</label>
+                        <div className="rounded-lg border border-border bg-muted/20 p-3">
+                            <div className="font-medium text-sm text-foreground truncate">
+                                {provider?.base_url || t('apiTester.providerNotConfigured')}
+                            </div>
+                            <div className="text-[11px] text-muted-foreground mt-1">
+                                {t('apiTester.providerMode', { mode: provider?.mode || 'auto' })}
+                            </div>
                         </div>
                     </div>
 

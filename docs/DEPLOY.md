@@ -66,7 +66,7 @@ cp config.example.json config.json
 
 - **触发条件**：默认仅在 Release `published` 时自动触发；也支持在 Actions 页面手动 `workflow_dispatch`，并填写 `release_tag` 复跑/补发
 - **构建产物**：多平台二进制压缩包、Linux Docker 镜像导出包 + `sha256sums.txt`
-- **容器镜像发布**：仅发布到 GHCR（`ghcr.io/cjackhwang/ds2api`）
+- **容器镜像发布**：仅发布到 GHCR（`ghcr.io/cjackhwang/tool-gateway`）
 
 | 平台 | 架构 | 文件格式 |
 | --- | --- | --- |
@@ -76,7 +76,7 @@ cp config.example.json config.json
 
 每个压缩包包含：
 
-- `ds2api` 可执行文件（Windows 为 `ds2api.exe`）
+- `tool-gateway` 可执行文件（Windows 为 `tool-gateway.exe`）
 - `static/admin/`（WebUI 构建产物）
 - `config.example.json`、`.env.example`
 - `README.MD`、`README.en.md`、`LICENSE`
@@ -86,15 +86,15 @@ cp config.example.json config.json
 ```bash
 # 1. 下载对应平台的压缩包
 # 2. 解压
-tar -xzf ds2api_<tag>_linux_amd64.tar.gz
-cd ds2api_<tag>_linux_amd64
+tar -xzf tool-gateway_<tag>_linux_amd64.tar.gz
+cd tool-gateway_<tag>_linux_amd64
 
 # 3. 配置
 cp config.example.json config.json
 # 编辑 config.json
 
 # 4. 启动
-./ds2api
+./tool-gateway
 ```
 
 ### 维护者发布步骤
@@ -111,7 +111,7 @@ cp config.example.json config.json
 
 ```bash
 # 拉取预编译镜像
-docker pull ghcr.io/cjackhwang/ds2api:latest
+docker pull ghcr.io/cjackhwang/tool-gateway:latest
 
 # 复制环境变量模板和配置文件
 cp .env.example .env
@@ -129,15 +129,15 @@ docker-compose up -d
 docker-compose logs -f
 ```
 
-默认 `docker-compose.yml` 直接使用 `ghcr.io/cjackhwang/ds2api:latest`，并把宿主机 `6011` 映射到容器内的 `5001`。如果你希望直接对外暴露 `5001`，请设置 `TOOL_GATEWAY_HOST_PORT=5001`（或者手动调整 `ports` 配置）。
+默认 `docker-compose.yml` 直接使用 `ghcr.io/cjackhwang/tool-gateway:latest`，并把宿主机 `6011` 映射到容器内的 `5001`。如果你希望直接对外暴露 `5001`，请设置 `TOOL_GATEWAY_HOST_PORT=5001`（或者手动调整 `ports` 配置）。
 Compose 模板还会默认设置 `TOOL_GATEWAY_CONFIG_PATH=/data/config.json` 并挂载 `./config.json:/data/config.json`，优先避免 `/app` 只读带来的配置持久化问题。
-镜像内会预创建 `/data` 并授权给非 root 的 `ds2api` 用户；如果你使用 bind mount 单文件，请确保宿主机 `config.json` 至少可被容器用户读取/写入，例如 `chmod 644 config.json`，否则 Linux UID/GID 不一致时仍可能出现 `open /data/config.json: permission denied`。
+镜像内会预创建 `/data` 并授权给非 root 的 `tool-gateway` 用户；如果你使用 bind mount 单文件，请确保宿主机 `config.json` 至少可被容器用户读取/写入，例如 `chmod 644 config.json`，否则 Linux UID/GID 不一致时仍可能出现 `open /data/config.json: permission denied`。
 兼容说明：若未设置 `TOOL_GATEWAY_CONFIG_PATH` 且运行目录是 `/app`，新版本会优先使用 `/data/config.json`；当该文件不存在但检测到历史 `/app/config.json` 时，会自动回退读取旧路径，避免升级后“配置丢失”。
 
 如需固定版本，也可以直接拉取指定 tag：
 
 ```bash
-docker pull ghcr.io/cjackhwang/ds2api:v3.0.0
+docker pull ghcr.io/cjackhwang/tool-gateway:v3.0.0
 ```
 
 ### 2.2 更新
@@ -155,7 +155,7 @@ docker-compose up -d --build
 
 Release 路径可确保 Docker 镜像与 release 压缩包使用同一套产物，减少重复构建带来的差异。
 
-容器内启动命令：`/usr/local/bin/ds2api`，默认暴露端口 `5001`。
+容器内启动命令：`/usr/local/bin/tool-gateway`，默认暴露端口 `5001`。
 
 ### 2.4 开发环境
 
@@ -381,12 +381,12 @@ Error: Command failed: go build -ldflags -s -w -o .../bootstrap ...
 #### Internal 包导入错误
 
 ```text
-use of internal package ds2api/internal/server not allowed
+use of internal package tool-gateway/internal/server not allowed
 ```
 
 **原因**：Vercel Go 入口文件直接 `import internal/...`。
 
-**解决**：当前仓库已通过公开桥接包 `app` 解决：`api/index.go` → `ds2api/app` → `internal/server`。
+**解决**：当前仓库已通过公开桥接包 `app` 解决：`api/index.go` → `tool-gateway/app` → `internal/server`。
 
 #### 输出目录错误
 
@@ -433,8 +433,8 @@ TOOL_GATEWAY_CHAT_HISTORY_PATH=/tmp/chat_history.json
 
 ```bash
 # 克隆仓库
-git clone https://github.com/CJackHwang/ds2api.git
-cd ds2api
+git clone https://github.com/CJackHwang/tool-gateway.git
+cd tool-gateway
 
 # 复制并编辑配置
 cp config.example.json config.json
@@ -480,8 +480,8 @@ TOOL_GATEWAY_AUTO_BUILD_WEBUI=true go run ./cmd/tool-gateway
 ### 4.3 编译为二进制文件
 
 ```bash
-go build -o ds2api ./cmd/tool-gateway
-./ds2api
+go build -o tool-gateway ./cmd/tool-gateway
+./tool-gateway
 ```
 
 ---
@@ -536,15 +536,15 @@ server {
 
 ```bash
 # 将编译好的二进制文件和相关文件复制到目标目录
-sudo mkdir -p /opt/ds2api
-sudo cp ds2api config.json /opt/ds2api/
-sudo cp -r static/admin /opt/ds2api/static/admin
+sudo mkdir -p /opt/tool-gateway
+sudo cp tool-gateway config.json /opt/tool-gateway/
+sudo cp -r static/admin /opt/tool-gateway/static/admin
 ```
 
 ### 6.2 创建 systemd 服务文件
 
 ```ini
-# /etc/systemd/system/ds2api.service
+# /etc/systemd/system/tool-gateway.service
 
 [Unit]
 Description=Tool Gateway (Go)
@@ -552,11 +552,11 @@ After=network.target
 
 [Service]
 Type=simple
-WorkingDirectory=/opt/ds2api
+WorkingDirectory=/opt/tool-gateway
 Environment=PORT=5001
-Environment=TOOL_GATEWAY_CONFIG_PATH=/opt/ds2api/config.json
+Environment=TOOL_GATEWAY_CONFIG_PATH=/opt/tool-gateway/config.json
 Environment=TOOL_GATEWAY_ADMIN_KEY=your-admin-key-here
-ExecStart=/opt/ds2api/ds2api
+ExecStart=/opt/tool-gateway/tool-gateway
 Restart=always
 RestartSec=5
 
@@ -571,22 +571,22 @@ WantedBy=multi-user.target
 sudo systemctl daemon-reload
 
 # 设置开机自启
-sudo systemctl enable ds2api
+sudo systemctl enable tool-gateway
 
 # 启动服务
-sudo systemctl start ds2api
+sudo systemctl start tool-gateway
 
 # 查看状态
-sudo systemctl status ds2api
+sudo systemctl status tool-gateway
 
 # 查看日志
-sudo journalctl -u ds2api -f
+sudo journalctl -u tool-gateway -f
 
 # 重启服务
-sudo systemctl restart ds2api
+sudo systemctl restart tool-gateway
 
 # 停止服务
-sudo systemctl stop ds2api
+sudo systemctl stop tool-gateway
 ```
 
 ---

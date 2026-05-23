@@ -3,18 +3,18 @@ package admin
 import (
 	"github.com/go-chi/chi/v5"
 
-	"ds2api/internal/chathistory"
-	adminaccounts "ds2api/internal/httpapi/admin/accounts"
-	adminauth "ds2api/internal/httpapi/admin/auth"
-	adminconfig "ds2api/internal/httpapi/admin/configmgmt"
-	admindevcapture "ds2api/internal/httpapi/admin/devcapture"
-	adminhistory "ds2api/internal/httpapi/admin/history"
-	adminproxies "ds2api/internal/httpapi/admin/proxies"
-	adminrawsamples "ds2api/internal/httpapi/admin/rawsamples"
-	adminsettings "ds2api/internal/httpapi/admin/settings"
-	adminshared "ds2api/internal/httpapi/admin/shared"
-	adminvercel "ds2api/internal/httpapi/admin/vercel"
-	adminversion "ds2api/internal/httpapi/admin/version"
+	"tool-gateway/internal/chathistory"
+	adminaccounts "tool-gateway/internal/httpapi/admin/accounts"
+	adminauth "tool-gateway/internal/httpapi/admin/auth"
+	adminconfig "tool-gateway/internal/httpapi/admin/configmgmt"
+	admindevcapture "tool-gateway/internal/httpapi/admin/devcapture"
+	adminhistory "tool-gateway/internal/httpapi/admin/history"
+	adminproxies "tool-gateway/internal/httpapi/admin/proxies"
+	adminrawsamples "tool-gateway/internal/httpapi/admin/rawsamples"
+	adminsettings "tool-gateway/internal/httpapi/admin/settings"
+	adminshared "tool-gateway/internal/httpapi/admin/shared"
+	adminvercel "tool-gateway/internal/httpapi/admin/vercel"
+	adminversion "tool-gateway/internal/httpapi/admin/version"
 )
 
 type Handler struct {

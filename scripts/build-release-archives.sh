@@ -10,11 +10,11 @@ build_one() {
   local tag="$1" build_version="$2" goos="$3" goarch="$4" goarm="$5" label="$6"
   local pkg stage bin
 
-  pkg="ds2api_${tag}_${label}"
+  pkg="tool-gateway_${tag}_${label}"
   stage="dist/${pkg}"
-  bin="ds2api"
+  bin="tool-gateway"
   if [[ "$goos" == "windows" ]]; then
-    bin="ds2api.exe"
+    bin="tool-gateway.exe"
   fi
 
   echo "[release-archives] building ${label}"
@@ -23,10 +23,10 @@ build_one() {
 
   if [[ "$goarm" == "-" ]]; then
     CGO_ENABLED=0 GOOS="$goos" GOARCH="$goarch" \
-      go build -buildvcs=false -trimpath -ldflags="-s -w -X ds2api/internal/version.BuildVersion=${build_version}" -o "${stage}/${bin}" ./cmd/tool-gateway
+      go build -buildvcs=false -trimpath -ldflags="-s -w -X tool-gateway/internal/version.BuildVersion=${build_version}" -o "${stage}/${bin}" ./cmd/tool-gateway
   else
     CGO_ENABLED=0 GOOS="$goos" GOARCH="$goarch" GOARM="$goarm" \
-      go build -buildvcs=false -trimpath -ldflags="-s -w -X ds2api/internal/version.BuildVersion=${build_version}" -o "${stage}/${bin}" ./cmd/tool-gateway
+      go build -buildvcs=false -trimpath -ldflags="-s -w -X tool-gateway/internal/version.BuildVersion=${build_version}" -o "${stage}/${bin}" ./cmd/tool-gateway
   fi
 
   cp config.example.json .env.example LICENSE README.MD README.en.md "${stage}/"

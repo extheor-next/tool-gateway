@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"ds2api/internal/config"
+	"tool-gateway/internal/config"
 )
 
 const (

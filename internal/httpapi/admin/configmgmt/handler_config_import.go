@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"strings"
 
-	"ds2api/internal/config"
+	"tool-gateway/internal/config"
 )
 
 func (h *Handler) configImport(w http.ResponseWriter, r *http.Request) {
@@ -48,6 +48,11 @@ func (h *Handler) configImport(w http.ResponseWriter, r *http.Request) {
 		next := c.Clone()
 		if mode == "replace" {
 			next = incoming.Clone()
+			next.ExternalAI = normalizeExternalAIForStorage(next.ExternalAI)
+			next.ExternalAIProviders = config.NormalizeExternalAIProvidersConfig(next.ExternalAIProviders)
+			if active, ok := activeExternalAIProvider(next.ExternalAIProviders); ok {
+				next.ExternalAI = normalizeExternalAIForStorage(config.ExternalAIFromProvider(active))
+			}
 			next.Accounts = normalizeAndDedupeAccounts(next.Accounts)
 			next.VercelSyncHash = c.VercelSyncHash
 			next.VercelSyncTime = c.VercelSyncTime
@@ -57,6 +62,15 @@ func (h *Handler) configImport(w http.ResponseWriter, r *http.Request) {
 			var changed int
 			next.APIKeys, changed = mergeAPIKeysPreferStructured(next.APIKeys, incoming.APIKeys)
 			importedKeys += changed
+			if incoming.ExternalAI.BaseURL != "" || incoming.ExternalAI.APIKey != "" || incoming.ExternalAI.Model != "" || incoming.ExternalAI.Mode != "" || len(incoming.ExternalAI.Headers) > 0 {
+				next.ExternalAI = normalizeExternalAIForStorage(incoming.ExternalAI)
+			}
+			if len(incoming.ExternalAIProviders.Providers) > 0 || strings.TrimSpace(incoming.ExternalAIProviders.Active) != "" {
+				next.ExternalAIProviders = mergeExternalAIProviders(next.ExternalAIProviders, incoming.ExternalAIProviders)
+				if active, ok := activeExternalAIProvider(next.ExternalAIProviders); ok {
+					next.ExternalAI = normalizeExternalAIForStorage(config.ExternalAIFromProvider(active))
+				}
+			}
 
 			existingAccounts := map[string]struct{}{}
 			for _, acc := range next.Accounts {

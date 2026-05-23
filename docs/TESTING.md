@@ -300,7 +300,7 @@ POST /admin/dev/raw-samples/save
 
 ```bash
 go run ./cmd/tool-gateway-tests \
-  --out /tmp/ds2api-test \
+  --out /tmp/tool-gateway-test \
   --timeout 60
 ```
 

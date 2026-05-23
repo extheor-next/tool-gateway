@@ -21,7 +21,13 @@ func ValidateConfig(c Config) error {
 	if err := ValidateEmbeddingsConfig(c.Embeddings); err != nil {
 		return err
 	}
+	if err := ValidateExternalAIConfig(c.ExternalAI); err != nil {
+		return err
+	}
 	if err := ValidateAutoDeleteConfig(c.AutoDelete); err != nil {
+		return err
+	}
+	if err := ValidateExternalAIProvidersConfig(c.ExternalAIProviders); err != nil {
 		return err
 	}
 	if err := ValidateCurrentInputFileConfig(c.CurrentInputFile); err != nil {
@@ -112,6 +118,45 @@ func ValidateEmbeddingsConfig(embeddings EmbeddingsConfig) error {
 
 func ValidateAutoDeleteConfig(autoDelete AutoDeleteConfig) error {
 	return ValidateAutoDeleteMode(autoDelete.Mode)
+}
+
+func ValidateExternalAIConfig(cfg ExternalAIConfig) error {
+	if err := ValidateIntRange("external_ai.max_inflight", cfg.MaxInflight, 0, 200000, false); err != nil {
+		return err
+	}
+	return ValidateIntRange("external_ai.max_queue", cfg.MaxQueue, 0, 200000, false)
+}
+
+func ValidateExternalAIProvidersConfig(cfg ExternalAIProvidersConfig) error {
+	seen := map[string]struct{}{}
+	for _, provider := range cfg.Providers {
+		provider = NormalizeExternalAIProvider(provider)
+		if err := ValidateTrimmedString("external_ai_providers.providers.id", provider.ID, true); err != nil {
+			return err
+		}
+		if _, ok := seen[provider.ID]; ok {
+			return fmt.Errorf("duplicate external_ai provider id: %s", provider.ID)
+		}
+		seen[provider.ID] = struct{}{}
+		switch normalizeExternalAIModeValue(provider.Mode) {
+		case "auto", "openai", "claude", "gemini":
+		default:
+			return fmt.Errorf("external_ai_providers.providers.mode must be one of auto, openai, claude, gemini")
+		}
+		if err := ValidateIntRange("external_ai_providers.providers.max_inflight", provider.MaxInflight, 0, 200000, false); err != nil {
+			return err
+		}
+		if err := ValidateIntRange("external_ai_providers.providers.max_queue", provider.MaxQueue, 0, 200000, false); err != nil {
+			return err
+		}
+	}
+	active := strings.TrimSpace(cfg.Active)
+	if active != "" {
+		if _, ok := seen[active]; !ok {
+			return fmt.Errorf("external_ai_providers.active references unknown provider: %s", active)
+		}
+	}
+	return nil
 }
 
 func ValidateCurrentInputFileConfig(currentInputFile CurrentInputFileConfig) error {

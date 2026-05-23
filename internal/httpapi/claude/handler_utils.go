@@ -1,12 +1,12 @@
 package claude
 
 import (
-	"ds2api/internal/toolcall"
+	"tool-gateway/internal/toolcall"
 	"encoding/json"
 	"fmt"
 	"strings"
 
-	"ds2api/internal/prompt"
+	"tool-gateway/internal/prompt"
 )
 
 func normalizeClaudeMessages(messages []any) []any {

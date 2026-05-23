@@ -3,9 +3,9 @@ package responses
 import (
 	"encoding/json"
 
-	openaifmt "ds2api/internal/format/openai"
-	"ds2api/internal/sse"
-	"ds2api/internal/toolstream"
+	openaifmt "tool-gateway/internal/format/openai"
+	"tool-gateway/internal/sse"
+	"tool-gateway/internal/toolstream"
 )
 
 func (s *responsesStreamRuntime) nextSequence() int {

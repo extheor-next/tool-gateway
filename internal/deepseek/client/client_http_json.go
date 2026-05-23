@@ -7,8 +7,8 @@ import (
 	"errors"
 	"net/http"
 
-	"ds2api/internal/config"
-	trans "ds2api/internal/deepseek/transport"
+	"tool-gateway/internal/config"
+	trans "tool-gateway/internal/deepseek/transport"
 )
 
 func (c *Client) postJSON(ctx context.Context, doer trans.Doer, fallback trans.Doer, url string, headers map[string]string, payload any) (map[string]any, error) {

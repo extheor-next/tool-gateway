@@ -4,11 +4,11 @@ import (
 	"net/http"
 	"strings"
 
-	"ds2api/internal/httpapi/openai/shared"
-	"ds2api/internal/promptcompat"
-	"ds2api/internal/sse"
-	"ds2api/internal/toolcall"
-	"ds2api/internal/util"
+	"tool-gateway/internal/httpapi/openai/shared"
+	"tool-gateway/internal/promptcompat"
+	"tool-gateway/internal/sse"
+	"tool-gateway/internal/toolcall"
+	"tool-gateway/internal/util"
 )
 
 type StopReason string

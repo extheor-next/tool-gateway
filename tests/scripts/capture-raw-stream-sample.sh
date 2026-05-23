@@ -39,7 +39,7 @@ TOOL_GATEWAY_CONFIG_PATH="$CONFIG_PATH" \
 TOOL_GATEWAY_ADMIN_KEY="$ADMIN_KEY" \
 TOOL_GATEWAY_DEV_PACKET_CAPTURE=1 \
 TOOL_GATEWAY_DEV_PACKET_CAPTURE_LIMIT=20 \
-  go run ./cmd/tool-gateway >/tmp/ds2api_capture_server.log 2>&1 &
+  go run ./cmd/tool-gateway >/tmp/tool-gateway_capture_server.log 2>&1 &
 
 for _ in $(seq 1 120); do
   if curl -sSf http://127.0.0.1:5001/healthz >/dev/null 2>&1; then

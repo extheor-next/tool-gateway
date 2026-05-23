@@ -8,15 +8,15 @@ import (
 	"strings"
 	"time"
 
-	"ds2api/internal/assistantturn"
-	"ds2api/internal/auth"
-	"ds2api/internal/completionruntime"
-	"ds2api/internal/config"
-	dsprotocol "ds2api/internal/deepseek/protocol"
-	openaifmt "ds2api/internal/format/openai"
-	"ds2api/internal/promptcompat"
-	"ds2api/internal/sse"
-	streamengine "ds2api/internal/stream"
+	"tool-gateway/internal/assistantturn"
+	"tool-gateway/internal/auth"
+	"tool-gateway/internal/completionruntime"
+	"tool-gateway/internal/config"
+	dsprotocol "tool-gateway/internal/deepseek/protocol"
+	openaifmt "tool-gateway/internal/format/openai"
+	"tool-gateway/internal/promptcompat"
+	"tool-gateway/internal/sse"
+	streamengine "tool-gateway/internal/stream"
 )
 
 func (h *Handler) ChatCompletions(w http.ResponseWriter, r *http.Request) {

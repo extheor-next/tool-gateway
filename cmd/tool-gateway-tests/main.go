@@ -7,7 +7,7 @@ import (
 	"os"
 	"time"
 
-	"ds2api/internal/testsuite"
+	"tool-gateway/internal/testsuite"
 )
 
 func main() {

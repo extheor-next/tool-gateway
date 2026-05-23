@@ -5,30 +5,67 @@ export function getBatchImportTemplates(t) {
         full: {
             name: t('batchImport.templates.full.name'),
             desc: t('batchImport.templates.full.desc'),
-            config: exampleConfig,
-        },
-        email_only: {
-            name: t('batchImport.templates.emailOnly.name'),
-            desc: t('batchImport.templates.emailOnly.desc'),
             config: {
-                keys: ['your-api-key'],
-                accounts: [
-                    { email: 'account1@example.com', password: 'pass1', token: '' },
-                    { email: 'account2@example.com', password: 'pass2', token: '' },
-                    { email: 'account3@example.com', password: 'pass3', token: '' },
-                ],
+                ...exampleConfig,
+                external_ai_providers: {
+                    active: 'openai-main',
+                    providers: [
+                        {
+                            id: 'openai-main',
+                            name: 'OpenAI Main',
+                            base_url: 'https://api.openai.com/v1',
+                            api_key: 'sk-your-upstream-key',
+                            model: 'gpt-4o-mini',
+                            mode: 'openai',
+                            max_inflight: 2,
+                            max_queue: 0,
+                            headers: {},
+                        },
+                        {
+                            id: 'claude-main',
+                            name: 'Claude Main',
+                            base_url: 'https://api.anthropic.com',
+                            api_key: 'sk-ant-your-upstream-key',
+                            model: 'claude-sonnet-4-6',
+                            mode: 'claude',
+                            max_inflight: 2,
+                            max_queue: 0,
+                            headers: {},
+                        },
+                    ],
+                },
             },
         },
-        mobile_only: {
-            name: t('batchImport.templates.mobileOnly.name'),
-            desc: t('batchImport.templates.mobileOnly.desc'),
+        provider_openai: {
+            name: t('batchImport.templates.providerOpenAI.name'),
+            desc: t('batchImport.templates.providerOpenAI.desc'),
             config: {
-                keys: ['your-api-key'],
-                accounts: [
-                    { mobile: '+8613800000001', password: 'pass1', token: '' },
-                    { mobile: '+8613800000002', password: 'pass2', token: '' },
-                    { mobile: '+8613800000003', password: 'pass3', token: '' },
-                ],
+                keys: ['your-gateway-api-key'],
+                external_ai: {
+                    base_url: 'https://api.openai.com/v1',
+                    api_key: 'sk-your-upstream-key',
+                    model: 'gpt-4o-mini',
+                    mode: 'auto',
+                    max_inflight: 2,
+                    max_queue: 0,
+                    headers: {},
+                },
+            },
+        },
+        provider_claude: {
+            name: t('batchImport.templates.providerClaude.name'),
+            desc: t('batchImport.templates.providerClaude.desc'),
+            config: {
+                keys: ['your-gateway-api-key'],
+                external_ai: {
+                    base_url: 'https://api.anthropic.com',
+                    api_key: 'sk-ant-your-upstream-key',
+                    model: 'claude-sonnet-4-6',
+                    mode: 'auto',
+                    max_inflight: 2,
+                    max_queue: 0,
+                    headers: {},
+                },
             },
         },
         keys_only: {

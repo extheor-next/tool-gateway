@@ -9,7 +9,7 @@ Language: [中文](ARCHITECTURE.md) | [English](ARCHITECTURE.en.md)
 > Notes: this lists the main business directories (excluding metadata/dependency dirs such as `.git/` and `webui/node_modules/`), with each folder annotated by purpose. Newly added directories should be verified from the code tree rather than treated as a per-file inventory here.
 
 ```text
-ds2api/
+tool-gateway/
 ├── .github/                              # GitHub collaboration and CI config
 │   ├── ISSUE_TEMPLATE/                   # Issue templates
 │   └── workflows/                        # GitHub Actions workflows

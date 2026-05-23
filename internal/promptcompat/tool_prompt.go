@@ -6,7 +6,7 @@ import (
 	"strings"
 	"unicode"
 
-	"ds2api/internal/toolcall"
+	"tool-gateway/internal/toolcall"
 )
 
 const CurrentToolsContextFilename = "TOOL_GATEWAY_TOOLS.txt"

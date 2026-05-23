@@ -11,11 +11,11 @@ import (
 	"sort"
 	"strings"
 
-	"ds2api/internal/config"
-	"ds2api/internal/devcapture"
-	adminshared "ds2api/internal/httpapi/admin/shared"
-	"ds2api/internal/rawsample"
-	"ds2api/internal/util"
+	"tool-gateway/internal/config"
+	"tool-gateway/internal/devcapture"
+	adminshared "tool-gateway/internal/httpapi/admin/shared"
+	"tool-gateway/internal/rawsample"
+	"tool-gateway/internal/util"
 )
 
 type captureChain struct {

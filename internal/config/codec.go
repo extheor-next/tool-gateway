@@ -41,8 +41,11 @@ func (c Config) MarshalJSON() ([]byte, error) {
 	if strings.TrimSpace(c.Embeddings.Provider) != "" {
 		m["embeddings"] = c.Embeddings
 	}
-	if strings.TrimSpace(c.ExternalAI.BaseURL) != "" || strings.TrimSpace(c.ExternalAI.APIKey) != "" || strings.TrimSpace(c.ExternalAI.Model) != "" || len(c.ExternalAI.Headers) > 0 {
+	if strings.TrimSpace(c.ExternalAI.BaseURL) != "" || strings.TrimSpace(c.ExternalAI.APIKey) != "" || strings.TrimSpace(c.ExternalAI.Model) != "" || strings.TrimSpace(c.ExternalAI.Mode) != "" || len(c.ExternalAI.Headers) > 0 || c.ExternalAI.MaxInflight > 0 || c.ExternalAI.MaxQueue > 0 {
 		m["external_ai"] = c.ExternalAI
+	}
+	if strings.TrimSpace(c.ExternalAIProviders.Active) != "" || len(c.ExternalAIProviders.Providers) > 0 {
+		m["external_ai_providers"] = NormalizeExternalAIProvidersConfig(c.ExternalAIProviders)
 	}
 	m["auto_delete"] = c.AutoDelete
 	if c.CurrentInputFile.Enabled != nil || c.CurrentInputFile.MinChars != 0 {
@@ -121,6 +124,10 @@ func (c *Config) UnmarshalJSON(b []byte) error {
 			if err := json.Unmarshal(v, &c.ExternalAI); err != nil {
 				return fmt.Errorf("invalid field %q: %w", k, err)
 			}
+		case "external_ai_providers":
+			if err := json.Unmarshal(v, &c.ExternalAIProviders); err != nil {
+				return fmt.Errorf("invalid field %q: %w", k, err)
+			}
 		case "auto_delete":
 			if err := json.Unmarshal(v, &c.AutoDelete); err != nil {
 				return fmt.Errorf("invalid field %q: %w", k, err)
@@ -170,12 +177,16 @@ func (c Config) Clone() Config {
 		Responses:    c.Responses,
 		Embeddings:   c.Embeddings,
 		ExternalAI: ExternalAIConfig{
-			BaseURL: c.ExternalAI.BaseURL,
-			APIKey:  c.ExternalAI.APIKey,
-			Model:   c.ExternalAI.Model,
-			Headers: cloneStringMap(c.ExternalAI.Headers),
+			BaseURL:     c.ExternalAI.BaseURL,
+			APIKey:      c.ExternalAI.APIKey,
+			Model:       c.ExternalAI.Model,
+			Mode:        c.ExternalAI.Mode,
+			Headers:     cloneStringMap(c.ExternalAI.Headers),
+			MaxInflight: c.ExternalAI.MaxInflight,
+			MaxQueue:    c.ExternalAI.MaxQueue,
 		},
-		AutoDelete: c.AutoDelete,
+		ExternalAIProviders: cloneExternalAIProviders(c.ExternalAIProviders),
+		AutoDelete:          c.AutoDelete,
 		CurrentInputFile: CurrentInputFileConfig{
 			Enabled:  cloneBoolPtr(c.CurrentInputFile.Enabled),
 			MinChars: c.CurrentInputFile.MinChars,
@@ -202,6 +213,27 @@ func cloneStringMap(in map[string]string) map[string]string {
 	out := make(map[string]string, len(in))
 	for k, v := range in {
 		out[k] = v
+	}
+	return out
+}
+
+func cloneExternalAIProviders(in ExternalAIProvidersConfig) ExternalAIProvidersConfig {
+	out := ExternalAIProvidersConfig{
+		Active:    in.Active,
+		Providers: make([]ExternalAIProviderConfig, 0, len(in.Providers)),
+	}
+	for _, provider := range in.Providers {
+		out.Providers = append(out.Providers, ExternalAIProviderConfig{
+			ID:          provider.ID,
+			Name:        provider.Name,
+			BaseURL:     provider.BaseURL,
+			APIKey:      provider.APIKey,
+			Model:       provider.Model,
+			Mode:        provider.Mode,
+			Headers:     cloneStringMap(provider.Headers),
+			MaxInflight: provider.MaxInflight,
+			MaxQueue:    provider.MaxQueue,
+		})
 	}
 	return out
 }

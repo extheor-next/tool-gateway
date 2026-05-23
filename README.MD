@@ -4,34 +4,22 @@
 
 # Tool Gateway
 
-<a href="https://trendshift.io/repositories/24508" target="_blank"><img src="https://trendshift.io/api/badge/repositories/24508" alt="CJackHwang%2Fds2api | Trendshift" style="width: 250px; height: 55px;" width="250" height="55"/></a>
+<a href="https://trendshift.io/repositories/24508" target="_blank"><img src="https://trendshift.io/api/badge/repositories/24508" alt="CJackHwang%2Ftool-gateway | Trendshift" style="width: 250px; height: 55px;" width="250" height="55"/></a>
 
-[![License](https://img.shields.io/github/license/CJackHwang/ds2api.svg)](LICENSE)
-![Stars](https://img.shields.io/github/stars/CJackHwang/ds2api.svg)
-![Forks](https://img.shields.io/github/forks/CJackHwang/ds2api.svg)
-[![Release](https://img.shields.io/github/v/release/CJackHwang/ds2api?display_name=tag)](https://github.com/CJackHwang/ds2api/releases)
+[![License](https://img.shields.io/github/license/CJackHwang/tool-gateway.svg)](LICENSE)
+![Stars](https://img.shields.io/github/stars/CJackHwang/tool-gateway.svg)
+![Forks](https://img.shields.io/github/forks/CJackHwang/tool-gateway.svg)
+[![Release](https://img.shields.io/github/v/release/CJackHwang/tool-gateway?display_name=tag)](https://github.com/CJackHwang/tool-gateway/releases)
 [![Docker](https://img.shields.io/badge/docker-ready-blue.svg)](docs/DEPLOY.md)
 
 [![Deploy on Zeabur](https://zeabur.com/button.svg)](https://zeabur.com/templates/L4CFHP)
-[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/CJackHwang/ds2api)
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/CJackHwang/tool-gateway)
 
 语言 / Language: [中文](README.MD) | [English](README.en.md)
 
 Tool Gateway 是一个面向 AI 大模型工具调用的通用网关项目：它把不同上游模型/服务统一封装成 OpenAI、Claude、Gemini 等常见协议，并提供工具调用解析、流式输出、鉴权、账号池、管理台和部署能力。核心后端以 **Go** 实现，Vercel 流式桥接额外使用少量 Node Runtime，前端为 React WebUI 管理台（源码在 `webui/`，部署时自动构建到 `static/admin`）。
 
 文档入口：[文档导航](docs/README.md) / [架构说明](docs/ARCHITECTURE.md) / [接口文档](API.md)
-
-【感谢Linux.do社区及GitHub社区各位开发者对项目的支持与贡献】
-
-## Star History
-
-<a href="https://www.star-history.com/?repos=cjackhwang%2Fds2api&type=date&legend=top-left">
- <picture>
-   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=cjackhwang/ds2api&type=date&theme=dark&legend=top-left" />
-   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=cjackhwang/ds2api&type=date&legend=top-left" />
-   <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=cjackhwang/ds2api&type=date&legend=top-left" />
- </picture>
-</a>
 
 > **重要免责声明**
 >
@@ -166,13 +154,6 @@ Tool Gateway 的模型层以“客户端模型名 → 上游模型名”的 alia
 - `/v1/models` 返回当前网关暴露给客户端的模型列表；不同上游适配器可以按自己的能力补充 thinking、search、vision 等特性。
 - OpenAI、Claude、Gemini 三类入口共享同一套模型 alias 与 Tool Calling 语义，便于客户端无缝切换协议。
 
-### Claude Code 接入避坑（实测）
-
-- `ANTHROPIC_BASE_URL` 推荐直接指向 Tool Gateway 根地址（例如 `http://127.0.0.1:5001`），Claude Code 会请求 `/v1/messages?beta=true`。
-- `ANTHROPIC_API_KEY` 需要与 `config.json` 中 `keys` 一致；建议同时保留常规 key 与 `sk-ant-*` 形态 key，兼容不同客户端校验习惯。
-- 若系统设置了代理，建议对 Tool Gateway 地址配置 `NO_PROXY=127.0.0.1,localhost,<你的主机IP>`，避免本地回环请求被代理拦截。
-- 如遇“工具调用输出成文本、未执行”问题，请优先检查模型输出是否为推荐的半角管道符 DSML 工具块：`<|DSML|tool_calls><|DSML|invoke name="..."><|DSML|parameter name="...">...`。兼容层也接受旧式 canonical XML：`<tool_calls><invoke name="..."><parameter name="...">...`；旧式 `<tools>` / `<tool_call>` / `<tool_name>` / `<param>`、`<function_call>`、`tool_use` 或纯 JSON `tool_calls` 片段不会执行，会作为普通文本处理。
-
 ## 快速开始
 
 ### 部署方式优先级建议
@@ -205,11 +186,11 @@ WebUI 管理台里的“全量配置模板”也直接复用同一份 `config.ex
 
 ```bash
 # 下载对应平台的压缩包后
-tar -xzf ds2api_<tag>_linux_amd64.tar.gz
-cd ds2api_<tag>_linux_amd64
+tar -xzf tool-gateway_<tag>_linux_amd64.tar.gz
+cd tool-gateway_<tag>_linux_amd64
 cp config.example.json config.json
 # 编辑 config.json
-./ds2api
+./tool-gateway
 ```
 
 ### 方式二：Docker 运行
@@ -231,7 +212,7 @@ docker-compose logs -f
 
 默认 `docker-compose.yml` 会把宿主机 `6011` 映射到容器内的 `5001`。如果你希望直接对外暴露 `5001`，请设置 `TOOL_GATEWAY_HOST_PORT=5001`（或者手动调整 `ports` 配置）。
 同时默认把 `./config.json` 挂载到容器 `/data/config.json`，并设置 `TOOL_GATEWAY_CONFIG_PATH=/data/config.json`，用于避免 `/app` 只读导致运行时 token 持久化失败。
-镜像会预创建 `/data` 并授权给非 root 的 `ds2api` 用户；如果使用单文件 bind mount，请确保宿主机 `config.json` 对容器用户可读写，例如 `chmod 644 config.json`。
+镜像会预创建 `/data` 并授权给非 root 的 `tool-gateway` 用户；如果使用单文件 bind mount，请确保宿主机 `config.json` 对容器用户可读写，例如 `chmod 644 config.json`。
 
 更新镜像：`docker-compose up -d --build`
 
@@ -277,8 +258,8 @@ base64 < config.json | tr -d '\n'
 
 ```bash
 # 1. 克隆仓库
-git clone https://github.com/CJackHwang/ds2api.git
-cd ds2api
+git clone https://github.com/CJackHwang/tool-gateway.git
+cd tool-gateway
 
 # 2. 配置
 cp config.example.json config.json
@@ -414,8 +395,8 @@ go run ./cmd/tool-gateway
 
 - **触发条件**：默认仅在 GitHub Release `published` 时自动触发；也支持在 Actions 页面手动 `workflow_dispatch`，并填写 `release_tag` 复跑/补发
 - **构建产物**：多平台二进制包（`linux/amd64`、`linux/arm64`、`linux/armv7`、`darwin/amd64`、`darwin/arm64`、`windows/amd64`、`windows/arm64`）、Linux Docker 镜像导出包 + `sha256sums.txt`
-- **容器镜像发布**：仅推送到 GHCR（`ghcr.io/cjackhwang/ds2api`）
-- **每个二进制压缩包包含**：`ds2api` 可执行文件、`static/admin`、`config.example.json`、`.env.example`、`README.MD`、`README.en.md`、`LICENSE`
+- **容器镜像发布**：仅推送到 GHCR（`ghcr.io/cjackhwang/tool-gateway`）
+- **每个二进制压缩包包含**：`tool-gateway` 可执行文件、`static/admin`、`config.example.json`、`.env.example`、`README.MD`、`README.en.md`、`LICENSE`
 
 ## 免责声明
 
@@ -423,3 +404,13 @@ go run ./cmd/tool-gateway
 作者及仓库维护者不对因使用、修改、分发、部署或依赖本项目而产生的任何直接或间接损失、账号封禁、数据丢失、法律风险或第三方索赔负责。
 
 请勿将本项目用于违反服务条款、协议、法律法规或平台规则的场景。商业使用前请自行确认 `LICENSE`、相关协议以及你是否获得了作者的书面许可。
+
+## Star History
+
+<a href="https://www.star-history.com/?repos=extheor-next%2Ftool-gateway&type=date&legend=top-left">
+ <picture>
+   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=cjackhwang/tool-gateway&type=date&theme=dark&legend=top-left" />
+   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=cjackhwang/tool-gateway&type=date&legend=top-left" />
+   <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=cjackhwang/tool-gateway&type=date&legend=top-left" />
+ </picture>
+</a>

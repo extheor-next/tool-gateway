@@ -5,7 +5,6 @@ export function useApiTesterState({ t }) {
     const defaultMessage = t('apiTester.defaultMessage')
     const [message, setMessage] = useState(defaultMessage)
     const [apiKey, setApiKey] = useState('')
-    const [selectedAccount, setSelectedAccount] = useState('')
     const [response, setResponse] = useState(null)
     const [loading, setLoading] = useState(false)
     const [streamingContent, setStreamingContent] = useState('')
@@ -32,8 +31,6 @@ export function useApiTesterState({ t }) {
         setAttachedFiles,
         apiKey,
         setApiKey,
-        selectedAccount,
-        setSelectedAccount,
         response,
         setResponse,
         loading,

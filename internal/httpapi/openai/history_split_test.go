@@ -11,10 +11,10 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"ds2api/internal/auth"
-	dsclient "ds2api/internal/deepseek/client"
-	"ds2api/internal/promptcompat"
-	"ds2api/internal/util"
+	"tool-gateway/internal/auth"
+	dsclient "tool-gateway/internal/deepseek/client"
+	"tool-gateway/internal/promptcompat"
+	"tool-gateway/internal/util"
 )
 
 func historySplitTestMessages() []any {

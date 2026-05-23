@@ -1,6 +1,6 @@
 package toolstream
 
-import "ds2api/internal/toolcall"
+import "tool-gateway/internal/toolcall"
 
 func ProcessChunk(state *State, chunk string, toolNames []string) []Event {
 	if state == nil {

@@ -1,12 +1,12 @@
 package responses
 
 import (
-	"ds2api/internal/toolcall"
-	"ds2api/internal/toolstream"
+	"tool-gateway/internal/toolcall"
+	"tool-gateway/internal/toolstream"
 	"encoding/json"
 	"strings"
 
-	openaifmt "ds2api/internal/format/openai"
+	openaifmt "tool-gateway/internal/format/openai"
 
 	"github.com/google/uuid"
 )

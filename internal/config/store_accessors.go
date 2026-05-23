@@ -47,22 +47,26 @@ func (s *Store) EmbeddingsProvider() string {
 func (s *Store) ExternalAI() ExternalAIConfig {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	cfg := s.cfg.ExternalAI
-	cfg.BaseURL = strings.TrimSpace(cfg.BaseURL)
-	cfg.APIKey = strings.TrimSpace(cfg.APIKey)
-	cfg.Model = strings.TrimSpace(cfg.Model)
-	if len(cfg.Headers) > 0 {
-		headers := make(map[string]string, len(cfg.Headers))
-		for k, v := range cfg.Headers {
-			key := strings.TrimSpace(k)
-			val := strings.TrimSpace(v)
-			if key != "" && val != "" {
-				headers[key] = val
+	providers := NormalizeExternalAIProvidersConfig(s.cfg.ExternalAIProviders)
+	if len(providers.Providers) > 0 {
+		for _, provider := range providers.Providers {
+			if provider.ID == providers.Active {
+				return ExternalAIFromProvider(provider)
 			}
 		}
-		cfg.Headers = headers
+		return ExternalAIFromProvider(providers.Providers[0])
 	}
-	return cfg
+	return NormalizeExternalAIConfig(s.cfg.ExternalAI)
+}
+
+func (s *Store) ExternalAIProviders() ExternalAIProvidersConfig {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return NormalizeExternalAIProvidersConfig(cloneExternalAIProviders(s.cfg.ExternalAIProviders))
+}
+
+func normalizeExternalAIMode(mode string) string {
+	return normalizeExternalAIModeValue(mode)
 }
 
 func (s *Store) AutoDeleteMode() string {

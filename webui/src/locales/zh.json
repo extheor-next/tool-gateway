@@ -32,6 +32,10 @@
         "settings": {
             "label": "设置中心",
             "desc": "在线修改系统设置与配置"
+        },
+        "providers": {
+            "label": "模型供应商",
+            "desc": "配置 Tool Gateway 调用的外部 AI 大模型服务"
         }
     },
     "sidebar": {
@@ -42,7 +46,8 @@
         "keys": "密钥",
         "signOut": "退出登录",
         "version": "版本",
-        "updateAvailable": "发现新版本 {latest}"
+        "updateAvailable": "发现新版本 {latest}",
+        "providers": "供应商"
     },
     "auth": {
         "expired": "认证已过期，请重新登录",
@@ -54,10 +59,12 @@
     "actions": {
         "cancel": "取消",
         "add": "添加",
+        "edit": "编辑",
         "delete": "删除",
         "copy": "复制",
         "generate": "生成",
         "test": "刷新 Token",
+        "refresh": "刷新",
         "testing": "正在刷新...",
         "loading": "加载中..."
     },
@@ -230,7 +237,7 @@
         "missingApiKey": "请提供 API 密钥",
         "requestFailed": "请求失败",
         "networkError": "网络错误: {error}",
-        "requestSuccess": "{account}: 请求成功 ({time}ms)",
+        "requestSuccess": "供应商请求成功 ({time}ms)",
         "testSuccess": "{account}: Token 刷新成功 ({time}ms)",
         "config": "配置",
         "modelLabel": "模型",
@@ -248,14 +255,53 @@
         "apiKeyPlaceholder": "输入自定义密钥",
         "modeManaged": "当前使用托管 key 模式（会走账号池）。",
         "modeDirect": "当前使用自定义 API key 模式（必须已加入网关 key 白名单）。",
-        "attachmentAccountHint": "附件已绑定账号：{account}，发送时会自动沿用同一账号。",
-        "fileAccountConflict": "附件来自不同账号，请先清空后重新上传。",
-        "fileAccountMismatch": "当前选择的账号与附件绑定账号不一致，请切换到绑定账号或清空附件后重试。",
         "statusError": "错误",
         "reasoningTrace": "思维链过程",
         "generating": "正在生成响应...",
         "enterMessage": "输入消息...",
-        "adminConsoleLabel": "Tool Gateway 管理界面"
+        "adminConsoleLabel": "Tool Gateway 管理界面",
+        "providerManager": {
+            "title": "外部 AI 供应商",
+            "description": "管理多个上游 AI 供应商并选择当前启用项。",
+            "addProvider": "添加供应商",
+            "editProvider": "编辑供应商",
+            "save": "保存供应商",
+            "saving": "保存中...",
+            "deleteConfirm": "确定删除这个供应商吗？",
+            "activeBadge": "当前启用",
+            "setActive": "设为启用",
+            "emptyTitle": "尚未配置供应商",
+            "emptyDesc": "请先添加至少一个外部 AI 供应商，运行时请求才会走这里。",
+            "nameLabel": "名称",
+            "namePlaceholder": "例如：OpenAI 主供应商",
+            "urlLabel": "基础 URL",
+            "urlHelp": "兼容 OpenAI 的上游 API 地址。",
+            "apiKeyLabel": "API 密钥",
+            "keepKeyHint": "留空表示保留已保存的密钥。",
+            "keepKeyPlaceholder": "留空表示保留现有密钥",
+            "modelLabel": "模型",
+            "modelHelp": "该供应商默认使用的模型。",
+            "maxInflightLabel": "并发上限",
+            "maxInflightHelp": "该供应商允许同时进行的最大请求数，0 表示不限制。",
+            "maxInflightShort": "并发",
+            "maxQueueLabel": "等待队列上限",
+            "maxQueueHelp": "该供应商并发满时允许等待的请求数，0 表示不排队。",
+            "maxQueueShort": "队列",
+            "unlimited": "不限制",
+            "modeLabel": "模式",
+            "headersLabel": "请求头",
+            "headersHelp": "每行一个请求头，格式：Key: Value。",
+            "requiredFields": "基础 URL 不能为空。",
+            "modes": {
+                "auto": "自动",
+                "openai": "OpenAI",
+                "claude": "Claude",
+                "gemini": "Gemini"
+            },
+            "detectedMode": "识别到：{mode}",
+            "detectedUnknown": "识别到：自动",
+            "keyPreview": "已保存密钥：{preview}"
+        }
     },
     "chatHistory": {
         "loading": "正在加载对话记录...",
@@ -330,16 +376,16 @@
     "batchImport": {
         "templates": {
             "full": {
-                "name": "全量配置模板",
-                "desc": "直接复用 config.example.json，包含密钥、账号和默认配置"
+                "name": "完整网关配置",
+                "desc": "直接复用 config.example.json，包含 API 密钥、external_ai 和运行时默认配置"
             },
-            "emailOnly": {
-                "name": "仅邮箱账号",
-                "desc": "批量导入邮箱格式账号"
+            "providerOpenAI": {
+                "name": "OpenAI 供应商",
+                "desc": "配置网关访问密钥和 OpenAI 兼容上游供应商"
             },
-            "mobileOnly": {
-                "name": "仅手机号账号",
-                "desc": "批量导入手机号格式账号"
+            "providerClaude": {
+                "name": "Claude 供应商",
+                "desc": "配置网关访问密钥和 Claude 兼容上游供应商"
             },
             "keysOnly": {
                 "name": "仅 API 密钥",
@@ -347,7 +393,7 @@
             }
         },
         "enterJson": "请输入 JSON 配置内容",
-        "importSuccess": "导入成功: {keys} 个密钥, {accounts} 个账号",
+        "importSuccess": "导入成功: {keys} 个密钥, {accounts} 个账号, {provider} 个供应商配置",
         "templateLoaded": "已加载模板: {name}",
         "currentConfigLoaded": "当前配置已加载",
         "fetchConfigFailed": "获取配置失败",
@@ -363,7 +409,7 @@
         "applyConfig": "应用配置",
         "importing": "正在导入...",
         "importComplete": "导入操作已完成",
-        "importSummary": "成功导入了 {keys} 个 API 密钥，并更新了 {accounts} 个账号。"
+        "importSummary": "成功导入了 {keys} 个 API 密钥，更新了 {accounts} 个账号，并应用了 {provider} 个供应商配置。"
     },
     "settings": {
         "loadFailed": "加载设置失败",
@@ -443,7 +489,7 @@
         "rememberSession": "记住登录状态",
         "signIn": "登录",
         "secureConnection": "安全连接",
-        "adminPortal": "DS2API 管理员门户",
+        "adminPortal": "Tool Gateway 管理员门户",
         "signInFailed": "登录失败",
         "networkError": "网络错误: {error}"
     },
@@ -483,6 +529,44 @@
             "two": "JSON 被编码为 Base64 以确保格式兼容性。",
             "three": "更新 Vercel 项目中的环境变量：",
             "four": "触发重新部署以应用新的环境变量。"
+        }
+    },
+    "providerManager": {
+        "title": "外部 AI 供应商",
+        "description": "管理多个上游 AI 供应商并选择当前启用项。",
+        "addProvider": "添加供应商",
+        "editProvider": "编辑供应商",
+        "save": "保存供应商",
+        "saving": "保存中...",
+        "saveSuccess": "供应商配置已保存。",
+        "deleteConfirm": "确定删除这个供应商吗？",
+        "activeBadge": "当前启用",
+        "setActive": "设为启用",
+        "emptyTitle": "尚未配置供应商",
+        "emptyDesc": "请先添加至少一个外部 AI 供应商，运行时请求才会走这里。",
+        "nameLabel": "名称",
+        "namePlaceholder": "例如：OpenAI 主供应商",
+        "urlLabel": "基础 URL",
+        "urlHelp": "填写供应商基础地址，例如 https://api.openai.com/v1。",
+        "apiKeyLabel": "API 密钥",
+        "apiKeyHelp": "保存到 config.external_ai.api_key，仅用于上游请求。",
+        "keepKeyHint": "留空表示保留已保存的密钥。",
+        "keepKeyPlaceholder": "留空表示保留现有密钥",
+        "keyPreview": "已保存密钥：{preview}",
+        "modeLabel": "模式",
+        "modelLabel": "模型",
+        "modelHelp": "该供应商默认使用的模型。",
+        "headersLabel": "请求头",
+        "headersHelp": "每行一个请求头，格式：Key: Value。",
+        "requiredFields": "基础 URL 不能为空。",
+        "detectedMode": "识别到：{mode}",
+        "detectedUnknown": "识别到：自动",
+        "modalTitle": "配置供应商",
+        "modes": {
+            "auto": "自动",
+            "openai": "OpenAI",
+            "claude": "Claude",
+            "gemini": "Gemini"
         }
     }
 }

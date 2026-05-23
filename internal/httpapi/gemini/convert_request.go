@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"strings"
 
-	"ds2api/internal/config"
-	"ds2api/internal/promptcompat"
-	"ds2api/internal/util"
+	"tool-gateway/internal/config"
+	"tool-gateway/internal/promptcompat"
+	"tool-gateway/internal/util"
 )
 
 //nolint:unused // kept for native Gemini adapter route compatibility.

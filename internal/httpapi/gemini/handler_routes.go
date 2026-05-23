@@ -5,9 +5,9 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"ds2api/internal/chathistory"
-	"ds2api/internal/textclean"
-	"ds2api/internal/util"
+	"tool-gateway/internal/chathistory"
+	"tool-gateway/internal/textclean"
+	"tool-gateway/internal/util"
 )
 
 var writeJSON = util.WriteJSON

@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"testing"
 
-	"ds2api/internal/auth"
+	"tool-gateway/internal/auth"
 )
 
 func TestCallCompletionDoesNotFallbackForNonIdempotentCompletion(t *testing.T) {

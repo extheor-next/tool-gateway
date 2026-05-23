@@ -11,21 +11,26 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"strconv"
 	"strings"
+	"sync"
 	"time"
 
-	"ds2api/internal/auth"
-	"ds2api/internal/config"
-	dsclient "ds2api/internal/deepseek/client"
+	"tool-gateway/internal/auth"
+	"tool-gateway/internal/config"
+	dsclient "tool-gateway/internal/deepseek/client"
 )
 
 // OpenAIAdapter is the OpenAI-compatible upstream backend used at runtime.
-// It keeps ds2api's existing prompt/tool-call parsing pipeline by converting
+// It keeps tool-gateway's existing prompt/tool-call parsing pipeline by converting
 // an OpenAI-compatible upstream stream into the small SSE shape that
 // the rest of the project already understands.
 type OpenAIAdapter struct {
 	Store  *config.Store
 	Client *http.Client
+
+	limitersMu sync.Mutex
+	limiters   map[string]*providerLimiter
 }
 
 func NewOpenAIAdapter(store *config.Store) *OpenAIAdapter {
@@ -39,7 +44,7 @@ func (a *OpenAIAdapter) Login(_ context.Context, _ config.Account) (string, erro
 }
 
 func (a *OpenAIAdapter) CreateSession(_ context.Context, _ *auth.RequestAuth, _ int) (string, error) {
-	return fmt.Sprintf("chatcmpl-ds2api-%d", time.Now().UnixNano()), nil
+	return fmt.Sprintf("chatcmpl-tool-gateway-%d", time.Now().UnixNano()), nil
 }
 
 func (a *OpenAIAdapter) GetPow(_ context.Context, _ *auth.RequestAuth, _ int) (string, error) {
@@ -67,10 +72,10 @@ func (a *OpenAIAdapter) UploadFile(_ context.Context, user *auth.RequestAuth, re
 func (a *OpenAIAdapter) CallCompletion(ctx context.Context, user *auth.RequestAuth, payload map[string]any, _ string, _ int) (*http.Response, error) {
 	cfg := a.externalConfig(user)
 	if strings.TrimSpace(cfg.BaseURL) == "" {
-		return nil, errors.New("external_ai.base_url or EXTERNAL_AI_BASE_URL is required")
+		return nil, errors.New("external_ai_providers active provider base_url, external_ai.base_url, or EXTERNAL_AI_BASE_URL is required")
 	}
 	if strings.TrimSpace(cfg.APIKey) == "" {
-		return nil, errors.New("external_ai.api_key, EXTERNAL_AI_API_KEY, or caller bearer token is required")
+		return nil, errors.New("external_ai_providers active provider api_key, external_ai.api_key, EXTERNAL_AI_API_KEY, or caller bearer token is required")
 	}
 	prompt := strings.TrimSpace(asString(payload["prompt"]))
 	if prompt == "" {
@@ -110,9 +115,19 @@ func (a *OpenAIAdapter) CallCompletion(ctx context.Context, user *auth.RequestAu
 	if client == nil {
 		client = &http.Client{Timeout: 0}
 	}
-	upstream, err := client.Do(req)
+	limiter, release, err := a.acquireProviderLimiter(ctx, cfg)
 	if err != nil {
 		return nil, err
+	}
+	upstream, err := client.Do(req)
+	if err != nil {
+		if release != nil {
+			release()
+		}
+		return nil, err
+	}
+	if limiter != nil {
+		upstream.Body = &providerLimitReadCloser{ReadCloser: upstream.Body, release: release}
 	}
 	if upstream.StatusCode < 200 || upstream.StatusCode >= 300 {
 		return upstream, nil
@@ -131,29 +146,55 @@ func (a *OpenAIAdapter) GetSessionCountForToken(_ context.Context, _ string) (*d
 }
 
 type externalAIConfig struct {
-	BaseURL string
-	APIKey  string
-	Model   string
-	Headers map[string]string
+	ProviderID  string
+	BaseURL     string
+	APIKey      string
+	Model       string
+	Mode        string
+	Headers     map[string]string
+	MaxInflight int
+	MaxQueue    int
 }
 
 func (a *OpenAIAdapter) externalConfig(user *auth.RequestAuth) externalAIConfig {
-	cfg := externalAIConfig{Headers: map[string]string{}}
+	cfg := externalAIConfig{ProviderID: "external_ai", Headers: map[string]string{}}
 	if a != nil && a.Store != nil {
-		storeCfg := a.Store.ExternalAI()
-		cfg.BaseURL = storeCfg.BaseURL
-		cfg.APIKey = storeCfg.APIKey
-		cfg.Model = storeCfg.Model
-		cfg.Headers = storeCfg.Headers
+		providers := a.Store.ExternalAIProviders()
+		if len(providers.Providers) > 0 {
+			for _, provider := range providers.Providers {
+				if provider.ID == providers.Active {
+					cfg = externalAIConfigFromProvider(provider)
+					break
+				}
+			}
+			if cfg.BaseURL == "" && cfg.APIKey == "" && cfg.Model == "" {
+				cfg = externalAIConfigFromProvider(providers.Providers[0])
+			}
+		} else {
+			storeCfg := a.Store.ExternalAI()
+			cfg.BaseURL = storeCfg.BaseURL
+			cfg.APIKey = storeCfg.APIKey
+			cfg.Model = storeCfg.Model
+			cfg.Mode = storeCfg.Mode
+			cfg.Headers = storeCfg.Headers
+			cfg.MaxInflight = storeCfg.MaxInflight
+			cfg.MaxQueue = storeCfg.MaxQueue
+		}
 		if cfg.Headers == nil {
 			cfg.Headers = map[string]string{}
 		}
 	}
 	if cfg.BaseURL == "" {
 		cfg.BaseURL = strings.TrimSpace(os.Getenv("EXTERNAL_AI_BASE_URL"))
+		if cfg.BaseURL != "" {
+			cfg.ProviderID = "env_external_ai"
+		}
 	}
 	if cfg.APIKey == "" {
 		cfg.APIKey = strings.TrimSpace(os.Getenv("EXTERNAL_AI_API_KEY"))
+		if cfg.APIKey != "" && cfg.ProviderID == "external_ai" && cfg.BaseURL != "" {
+			cfg.ProviderID = "env_external_ai"
+		}
 	}
 	if cfg.APIKey == "" && user != nil && !user.UseConfigToken {
 		cfg.APIKey = strings.TrimSpace(user.DeepSeekToken)
@@ -161,7 +202,133 @@ func (a *OpenAIAdapter) externalConfig(user *auth.RequestAuth) externalAIConfig 
 	if cfg.Model == "" {
 		cfg.Model = strings.TrimSpace(os.Getenv("EXTERNAL_AI_MODEL"))
 	}
+	if cfg.MaxInflight == 0 {
+		cfg.MaxInflight = envInt("EXTERNAL_AI_MAX_INFLIGHT")
+	}
+	if cfg.MaxQueue == 0 {
+		cfg.MaxQueue = envInt("EXTERNAL_AI_MAX_QUEUE")
+	}
+	if cfg.ProviderID == "" {
+		cfg.ProviderID = "external_ai"
+	}
 	return cfg
+}
+
+func externalAIConfigFromProvider(provider config.ExternalAIProviderConfig) externalAIConfig {
+	provider = config.NormalizeExternalAIProvider(provider)
+	return externalAIConfig{
+		ProviderID:  provider.ID,
+		BaseURL:     provider.BaseURL,
+		APIKey:      provider.APIKey,
+		Model:       provider.Model,
+		Mode:        provider.Mode,
+		Headers:     provider.Headers,
+		MaxInflight: provider.MaxInflight,
+		MaxQueue:    provider.MaxQueue,
+	}
+}
+
+func envInt(key string) int {
+	n, _ := strconv.Atoi(strings.TrimSpace(os.Getenv(key)))
+	if n < 0 {
+		return 0
+	}
+	return n
+}
+
+type providerLimiter struct {
+	mu       sync.Mutex
+	cond     *sync.Cond
+	inflight int
+	waiting  int
+}
+
+func (a *OpenAIAdapter) acquireProviderLimiter(ctx context.Context, cfg externalAIConfig) (*providerLimiter, func(), error) {
+	if cfg.MaxInflight <= 0 {
+		return nil, nil, nil
+	}
+	key := strings.TrimSpace(cfg.ProviderID)
+	if key == "" {
+		key = "external_ai"
+	}
+	limiter := a.providerLimiter(key)
+	if err := limiter.acquire(ctx, cfg.MaxInflight, cfg.MaxQueue); err != nil {
+		return limiter, nil, err
+	}
+	return limiter, limiter.release, nil
+}
+
+func (a *OpenAIAdapter) providerLimiter(key string) *providerLimiter {
+	a.limitersMu.Lock()
+	defer a.limitersMu.Unlock()
+	if a.limiters == nil {
+		a.limiters = map[string]*providerLimiter{}
+	}
+	limiter := a.limiters[key]
+	if limiter == nil {
+		limiter = &providerLimiter{}
+		limiter.cond = sync.NewCond(&limiter.mu)
+		a.limiters[key] = limiter
+	}
+	return limiter
+}
+
+func (l *providerLimiter) acquire(ctx context.Context, maxInflight, maxQueue int) error {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if l.inflight < maxInflight {
+		l.inflight++
+		return nil
+	}
+	if maxQueue <= 0 || l.waiting >= maxQueue {
+		return errors.New("active external AI provider concurrency limit reached")
+	}
+	l.waiting++
+	defer func() { l.waiting-- }()
+	done := make(chan struct{})
+	go func() {
+		select {
+		case <-ctx.Done():
+			l.mu.Lock()
+			l.cond.Broadcast()
+			l.mu.Unlock()
+		case <-done:
+		}
+	}()
+	defer close(done)
+	for l.inflight >= maxInflight {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		l.cond.Wait()
+	}
+	l.inflight++
+	return nil
+}
+
+func (l *providerLimiter) release() {
+	l.mu.Lock()
+	if l.inflight > 0 {
+		l.inflight--
+	}
+	l.cond.Signal()
+	l.mu.Unlock()
+}
+
+type providerLimitReadCloser struct {
+	io.ReadCloser
+	release func()
+	once    sync.Once
+}
+
+func (r *providerLimitReadCloser) Close() error {
+	err := r.ReadCloser.Close()
+	r.once.Do(func() {
+		if r.release != nil {
+			r.release()
+		}
+	})
+	return err
 }
 
 func chatCompletionsURL(base string) (string, error) {

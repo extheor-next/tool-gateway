@@ -3,7 +3,7 @@ package devcapture
 import (
 	"net/http"
 
-	"ds2api/internal/devcapture"
+	"tool-gateway/internal/devcapture"
 )
 
 func (h *Handler) getDevCaptures(w http.ResponseWriter, _ *http.Request) {

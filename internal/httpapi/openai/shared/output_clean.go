@@ -1,6 +1,6 @@
 package shared
 
-import textclean "ds2api/internal/textclean"
+import textclean "tool-gateway/internal/textclean"
 
 func CleanVisibleOutput(text string, stripReferenceMarkers bool) string {
 	if text == "" {

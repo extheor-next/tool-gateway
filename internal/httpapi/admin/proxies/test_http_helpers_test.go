@@ -9,12 +9,12 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"ds2api/internal/account"
-	"ds2api/internal/auth"
-	"ds2api/internal/config"
-	dsclient "ds2api/internal/deepseek/client"
-	adminconfig "ds2api/internal/httpapi/admin/configmgmt"
-	adminshared "ds2api/internal/httpapi/admin/shared"
+	"tool-gateway/internal/account"
+	"tool-gateway/internal/auth"
+	"tool-gateway/internal/config"
+	dsclient "tool-gateway/internal/deepseek/client"
+	adminconfig "tool-gateway/internal/httpapi/admin/configmgmt"
+	adminshared "tool-gateway/internal/httpapi/admin/shared"
 )
 
 type testingBackendMock struct{}

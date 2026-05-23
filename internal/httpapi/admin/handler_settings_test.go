@@ -7,7 +7,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	authn "ds2api/internal/auth"
+	authn "tool-gateway/internal/auth"
 )
 
 func TestGetSettingsDefaultPasswordWarning(t *testing.T) {

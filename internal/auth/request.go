@@ -10,8 +10,8 @@ import (
 	"sync"
 	"time"
 
-	"ds2api/internal/account"
-	"ds2api/internal/config"
+	"tool-gateway/internal/account"
+	"tool-gateway/internal/config"
 )
 
 type ctxKey string

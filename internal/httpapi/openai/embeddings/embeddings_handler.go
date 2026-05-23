@@ -8,11 +8,11 @@ import (
 	"net/http"
 	"strings"
 
-	"ds2api/internal/auth"
-	"ds2api/internal/chathistory"
-	"ds2api/internal/config"
-	"ds2api/internal/httpapi/openai/shared"
-	"ds2api/internal/util"
+	"tool-gateway/internal/auth"
+	"tool-gateway/internal/chathistory"
+	"tool-gateway/internal/config"
+	"tool-gateway/internal/httpapi/openai/shared"
+	"tool-gateway/internal/util"
 )
 
 type Handler struct {

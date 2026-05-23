@@ -11,9 +11,9 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"ds2api/internal/auth"
-	"ds2api/internal/chathistory"
-	dsclient "ds2api/internal/deepseek/client"
+	"tool-gateway/internal/auth"
+	"tool-gateway/internal/chathistory"
+	dsclient "tool-gateway/internal/deepseek/client"
 )
 
 type responsesHistoryBackend struct {

@@ -9,11 +9,11 @@ import (
 	"strings"
 	"time"
 
-	"ds2api/internal/auth"
-	"ds2api/internal/config"
-	"ds2api/internal/httpapi/openai/history"
-	"ds2api/internal/promptcompat"
-	"ds2api/internal/util"
+	"tool-gateway/internal/auth"
+	"tool-gateway/internal/config"
+	"tool-gateway/internal/httpapi/openai/history"
+	"tool-gateway/internal/promptcompat"
+	"tool-gateway/internal/util"
 
 	"github.com/google/uuid"
 )
@@ -82,7 +82,7 @@ func (h *Handler) handleVercelStreamPrepare(w http.ResponseWriter, r *http.Reque
 		if a.UseConfigToken {
 			writeOpenAIError(w, http.StatusUnauthorized, "Account token is invalid. Please re-login the account in admin.")
 		} else {
-			writeOpenAIError(w, http.StatusUnauthorized, "Invalid token. If this should be a DS2API key, add it to config.keys first.")
+			writeOpenAIError(w, http.StatusUnauthorized, "Invalid token. If this should be a Tool Gateway key, add it to config.keys first.")
 		}
 		return
 	}
@@ -92,7 +92,7 @@ func (h *Handler) handleVercelStreamPrepare(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	if strings.TrimSpace(a.DeepSeekToken) == "" {
-		writeOpenAIError(w, http.StatusUnauthorized, "Invalid token. If this should be a DS2API key, add it to config.keys first.")
+		writeOpenAIError(w, http.StatusUnauthorized, "Invalid token. If this should be a Tool Gateway key, add it to config.keys first.")
 		return
 	}
 

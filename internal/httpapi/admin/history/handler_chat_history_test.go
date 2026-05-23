@@ -11,8 +11,8 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"ds2api/internal/chathistory"
-	"ds2api/internal/config"
+	"tool-gateway/internal/chathistory"
+	"tool-gateway/internal/config"
 )
 
 func newChatHistoryAdminHarness(t *testing.T) (*Handler, *chathistory.Store) {

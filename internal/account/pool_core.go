@@ -4,7 +4,7 @@ import (
 	"sort"
 	"sync"
 
-	"ds2api/internal/config"
+	"tool-gateway/internal/config"
 )
 
 type Pool struct {

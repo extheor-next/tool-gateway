@@ -1,13 +1,13 @@
 package claude
 
 import (
-	"ds2api/internal/assistantturn"
-	"ds2api/internal/toolcall"
+	"tool-gateway/internal/assistantturn"
+	"tool-gateway/internal/toolcall"
 	"fmt"
 	"time"
 
-	"ds2api/internal/prompt"
-	"ds2api/internal/util"
+	"tool-gateway/internal/prompt"
+	"tool-gateway/internal/util"
 )
 
 func BuildMessageResponseFromTurn(messageID, model string, turn assistantturn.Turn, exposeThinking bool) map[string]any {

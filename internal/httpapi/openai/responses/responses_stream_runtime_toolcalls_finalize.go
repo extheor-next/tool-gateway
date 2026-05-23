@@ -1,12 +1,12 @@
 package responses
 
 import (
-	"ds2api/internal/toolcall"
+	"tool-gateway/internal/toolcall"
 	"encoding/json"
 	"sort"
 	"strings"
 
-	openaifmt "ds2api/internal/format/openai"
+	openaifmt "tool-gateway/internal/format/openai"
 )
 
 func (s *responsesStreamRuntime) closeIncompleteFunctionItems() {

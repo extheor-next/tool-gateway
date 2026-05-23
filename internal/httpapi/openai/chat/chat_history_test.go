@@ -12,9 +12,9 @@ import (
 	"testing"
 	"time"
 
-	"ds2api/internal/auth"
-	"ds2api/internal/chathistory"
-	"ds2api/internal/promptcompat"
+	"tool-gateway/internal/auth"
+	"tool-gateway/internal/chathistory"
+	"tool-gateway/internal/promptcompat"
 )
 
 func newTestChatHistoryStore(t *testing.T) *chathistory.Store {

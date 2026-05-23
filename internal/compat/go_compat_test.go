@@ -7,8 +7,8 @@ import (
 	"reflect"
 	"testing"
 
-	"ds2api/internal/sse"
-	"ds2api/internal/util"
+	"tool-gateway/internal/sse"
+	"tool-gateway/internal/util"
 )
 
 func TestGoCompatSSEFixtures(t *testing.T) {

@@ -9,7 +9,7 @@
 > 说明：以下为仓库内主要业务目录（排除 `.git/` 与 `webui/node_modules/` 这类依赖/元数据目录），并标注每个文件夹作用。新增目录以代码为准，不要求在本文做逐文件展开。
 
 ```text
-ds2api/
+tool-gateway/
 ├── .github/                              # GitHub 协作与 CI 配置
 │   ├── ISSUE_TEMPLATE/                   # Issue 模板
 │   └── workflows/                        # GitHub Actions 工作流

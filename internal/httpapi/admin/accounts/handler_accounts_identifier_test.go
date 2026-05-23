@@ -10,8 +10,8 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"ds2api/internal/account"
-	"ds2api/internal/config"
+	"tool-gateway/internal/account"
+	"tool-gateway/internal/config"
 )
 
 func newAdminTestHandler(t *testing.T, raw string) *Handler {

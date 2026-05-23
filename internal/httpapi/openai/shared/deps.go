@@ -4,11 +4,11 @@ import (
 	"context"
 	"net/http"
 
-	"ds2api/internal/auth"
-	"ds2api/internal/chathistory"
-	"ds2api/internal/config"
-	dsclient "ds2api/internal/deepseek/client"
-	"ds2api/internal/util"
+	"tool-gateway/internal/auth"
+	"tool-gateway/internal/chathistory"
+	"tool-gateway/internal/config"
+	dsclient "tool-gateway/internal/deepseek/client"
+	"tool-gateway/internal/util"
 )
 
 const (

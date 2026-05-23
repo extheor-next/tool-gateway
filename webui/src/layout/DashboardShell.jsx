@@ -45,7 +45,7 @@ export default function DashboardShell({ token, onLogout, config, fetchConfig, s
     const [sidebarOpen, setSidebarOpen] = useState(false)
 
     const navItems = [
-        { id: 'accounts', label: t('nav.accounts.label'), icon: Users, description: t('nav.accounts.desc') },
+        { id: 'accounts', label: t('nav.providers.label'), icon: Users, description: t('nav.providers.desc') },
         { id: 'proxies', label: t('nav.proxies.label'), icon: Globe, description: t('nav.proxies.desc') },
         { id: 'test', label: t('nav.test.label'), icon: Server, description: t('nav.test.desc') },
         { id: 'history', label: t('nav.history.label'), icon: History, description: t('nav.history.desc') },
@@ -146,7 +146,7 @@ export default function DashboardShell({ token, onLogout, config, fetchConfig, s
                         <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center text-primary-foreground shadow-lg shadow-primary/20">
                             <LayoutDashboard className="w-5 h-5" />
                         </div>
-                        <span>DS2API</span>
+                        <span>Tool Gateway</span>
                     </div>
                     <div className="flex items-center justify-between mt-2">
                         <p className="text-[10px] text-muted-foreground font-semibold tracking-[0.1em] uppercase opacity-60 px-1">{t('sidebar.onlineAdminConsole')}</p>
@@ -190,8 +190,8 @@ export default function DashboardShell({ token, onLogout, config, fetchConfig, s
                         </div>
                         <div className="grid grid-cols-2 gap-2">
                             <div className="bg-background rounded-lg p-3 border border-border shadow-sm">
-                                <div className="text-[9px] text-muted-foreground font-bold uppercase tracking-wider mb-0.5 opacity-70">{t('sidebar.accounts')}</div>
-                                <div className="text-lg font-bold text-foreground leading-tight">{config.accounts?.length || 0}</div>
+                                <div className="text-[9px] text-muted-foreground font-bold uppercase tracking-wider mb-0.5 opacity-70">{t('sidebar.providers')}</div>
+                                <div className="text-lg font-bold text-foreground leading-tight">{config.external_ai?.base_url ? 1 : 0}</div>
                             </div>
                             <div className="bg-background rounded-lg p-3 border border-border shadow-sm">
                                 <div className="text-[9px] text-muted-foreground font-bold uppercase tracking-wider mb-0.5 opacity-70">{t('sidebar.keys')}</div>
@@ -204,7 +204,7 @@ export default function DashboardShell({ token, onLogout, config, fetchConfig, s
                             {versionInfo?.has_update && (
                                 <a
                                     className="inline-flex mt-1 text-[10px] text-amber-500 hover:text-amber-400"
-                                    href={versionInfo?.release_url || 'https://github.com/CJackHwang/ds2api/releases/latest'}
+                                    href={versionInfo?.release_url || 'https://github.com/CJackHwang/tool-gateway/releases/latest'}
                                     target="_blank"
                                     rel="noreferrer"
                                 >
@@ -229,7 +229,7 @@ export default function DashboardShell({ token, onLogout, config, fetchConfig, s
                         <div className="w-6 h-6 rounded bg-primary flex items-center justify-center text-primary-foreground text-[10px]">
                             <LayoutDashboard className="w-3.5 h-3.5" />
                         </div>
-                        <span className="font-semibold text-sm">DS2API</span>
+                        <span className="font-semibold text-sm">Tool Gateway</span>
                     </div>
                     <div className="flex items-center gap-2">
                         <LanguageToggle />
@@ -265,7 +265,7 @@ export default function DashboardShell({ token, onLogout, config, fetchConfig, s
                         )}
 
                         <div className="animate-in fade-in duration-500">
-                            <Suspense fallback={<TabLoadingFallback label={activeNavItem?.label || 'DS2API'} />}>
+                            <Suspense fallback={<TabLoadingFallback label={activeNavItem?.label || 'Tool Gateway'} />}>
                                 {renderTab()}
                             </Suspense>
                         </div>

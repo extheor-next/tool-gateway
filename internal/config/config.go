@@ -8,23 +8,24 @@ import (
 )
 
 type Config struct {
-	Keys              []string                `json:"keys,omitempty"`
-	APIKeys           []APIKey                `json:"api_keys,omitempty"`
-	Accounts          []Account               `json:"accounts,omitempty"`
-	Proxies           []Proxy                 `json:"proxies,omitempty"`
-	ModelAliases      map[string]string       `json:"model_aliases,omitempty"`
-	Admin             AdminConfig             `json:"admin,omitempty"`
-	Runtime           RuntimeConfig           `json:"runtime,omitempty"`
-	Responses         ResponsesConfig         `json:"responses,omitempty"`
-	Embeddings        EmbeddingsConfig        `json:"embeddings,omitempty"`
-	ExternalAI        ExternalAIConfig        `json:"external_ai,omitempty"`
-	AutoDelete        AutoDeleteConfig        `json:"auto_delete"`
-	CurrentInputFile  CurrentInputFileConfig  `json:"current_input_file,omitempty"`
-	ThinkingInjection ThinkingInjectionConfig `json:"thinking_injection,omitempty"`
-	Vercel            VercelConfig            `json:"vercel,omitempty"`
-	VercelSyncHash    string                  `json:"_vercel_sync_hash,omitempty"`
-	VercelSyncTime    int64                   `json:"_vercel_sync_time,omitempty"`
-	AdditionalFields  map[string]any          `json:"-"`
+	Keys                []string                  `json:"keys,omitempty"`
+	APIKeys             []APIKey                  `json:"api_keys,omitempty"`
+	Accounts            []Account                 `json:"accounts,omitempty"`
+	Proxies             []Proxy                   `json:"proxies,omitempty"`
+	ModelAliases        map[string]string         `json:"model_aliases,omitempty"`
+	Admin               AdminConfig               `json:"admin,omitempty"`
+	Runtime             RuntimeConfig             `json:"runtime,omitempty"`
+	Responses           ResponsesConfig           `json:"responses,omitempty"`
+	Embeddings          EmbeddingsConfig          `json:"embeddings,omitempty"`
+	ExternalAI          ExternalAIConfig          `json:"external_ai,omitempty"`
+	ExternalAIProviders ExternalAIProvidersConfig `json:"external_ai_providers,omitempty"`
+	AutoDelete          AutoDeleteConfig          `json:"auto_delete"`
+	CurrentInputFile    CurrentInputFileConfig    `json:"current_input_file,omitempty"`
+	ThinkingInjection   ThinkingInjectionConfig   `json:"thinking_injection,omitempty"`
+	Vercel              VercelConfig              `json:"vercel,omitempty"`
+	VercelSyncHash      string                    `json:"_vercel_sync_hash,omitempty"`
+	VercelSyncTime      int64                     `json:"_vercel_sync_time,omitempty"`
+	AdditionalFields    map[string]any            `json:"-"`
 }
 
 type Account struct {
@@ -165,10 +166,164 @@ type EmbeddingsConfig struct {
 }
 
 type ExternalAIConfig struct {
-	BaseURL string            `json:"base_url,omitempty"`
-	APIKey  string            `json:"api_key,omitempty"`
-	Model   string            `json:"model,omitempty"`
-	Headers map[string]string `json:"headers,omitempty"`
+	BaseURL     string            `json:"base_url,omitempty"`
+	APIKey      string            `json:"api_key,omitempty"`
+	Model       string            `json:"model,omitempty"`
+	Mode        string            `json:"mode,omitempty"`
+	Headers     map[string]string `json:"headers,omitempty"`
+	MaxInflight int               `json:"max_inflight,omitempty"`
+	MaxQueue    int               `json:"max_queue,omitempty"`
+}
+
+type ExternalAIProvidersConfig struct {
+	Active    string                     `json:"active,omitempty"`
+	Providers []ExternalAIProviderConfig `json:"providers,omitempty"`
+}
+
+type ExternalAIProviderConfig struct {
+	ID          string            `json:"id,omitempty"`
+	Name        string            `json:"name,omitempty"`
+	BaseURL     string            `json:"base_url,omitempty"`
+	APIKey      string            `json:"api_key,omitempty"`
+	Model       string            `json:"model,omitempty"`
+	Mode        string            `json:"mode,omitempty"`
+	Headers     map[string]string `json:"headers,omitempty"`
+	MaxInflight int               `json:"max_inflight,omitempty"`
+	MaxQueue    int               `json:"max_queue,omitempty"`
+}
+
+func NormalizeExternalAIProvider(p ExternalAIProviderConfig) ExternalAIProviderConfig {
+	p.ID = strings.TrimSpace(p.ID)
+	p.Name = strings.TrimSpace(p.Name)
+	p.BaseURL = strings.TrimSpace(p.BaseURL)
+	p.APIKey = strings.TrimSpace(p.APIKey)
+	p.Model = strings.TrimSpace(p.Model)
+	p.Mode = normalizeExternalAIModeValue(p.Mode)
+	if p.MaxInflight < 0 {
+		p.MaxInflight = 0
+	}
+	if p.MaxQueue < 0 {
+		p.MaxQueue = 0
+	}
+	if len(p.Headers) > 0 {
+		headers := map[string]string{}
+		for k, v := range p.Headers {
+			key := strings.TrimSpace(k)
+			val := strings.TrimSpace(v)
+			if key != "" && val != "" {
+				headers[key] = val
+			}
+		}
+		p.Headers = headers
+	}
+	if p.ID == "" {
+		p.ID = StableExternalAIProviderID(p)
+	}
+	if p.Name == "" && p.BaseURL != "" {
+		p.Name = p.BaseURL
+	}
+	return p
+}
+
+func NormalizeExternalAIConfig(cfg ExternalAIConfig) ExternalAIConfig {
+	cfg.BaseURL = strings.TrimSpace(cfg.BaseURL)
+	cfg.APIKey = strings.TrimSpace(cfg.APIKey)
+	cfg.Model = strings.TrimSpace(cfg.Model)
+	cfg.Mode = normalizeExternalAIModeValue(cfg.Mode)
+	if cfg.MaxInflight < 0 {
+		cfg.MaxInflight = 0
+	}
+	if cfg.MaxQueue < 0 {
+		cfg.MaxQueue = 0
+	}
+	if len(cfg.Headers) > 0 {
+		headers := map[string]string{}
+		for k, v := range cfg.Headers {
+			key := strings.TrimSpace(k)
+			val := strings.TrimSpace(v)
+			if key != "" && val != "" {
+				headers[key] = val
+			}
+		}
+		cfg.Headers = headers
+	}
+	return cfg
+}
+
+func NormalizeExternalAIProvidersConfig(cfg ExternalAIProvidersConfig) ExternalAIProvidersConfig {
+	cfg.Active = strings.TrimSpace(cfg.Active)
+	providers := make([]ExternalAIProviderConfig, 0, len(cfg.Providers))
+	seen := map[string]struct{}{}
+	for _, provider := range cfg.Providers {
+		provider = NormalizeExternalAIProvider(provider)
+		if provider.ID == "" {
+			continue
+		}
+		if _, ok := seen[provider.ID]; ok {
+			continue
+		}
+		seen[provider.ID] = struct{}{}
+		providers = append(providers, provider)
+	}
+	cfg.Providers = providers
+	if len(cfg.Providers) == 0 {
+		cfg.Active = ""
+		return cfg
+	}
+	if cfg.Active != "" {
+		if _, ok := seen[cfg.Active]; ok {
+			return cfg
+		}
+	}
+	cfg.Active = cfg.Providers[0].ID
+	return cfg
+}
+
+func StableExternalAIProviderID(p ExternalAIProviderConfig) string {
+	seed := strings.ToLower(strings.TrimSpace(p.Name)) + "|" + strings.ToLower(strings.TrimSpace(p.BaseURL)) + "|" + strings.TrimSpace(p.Model)
+	if strings.Trim(seed, "|") == "" {
+		return ""
+	}
+	sum := sha1.Sum([]byte(seed))
+	return "provider_" + hex.EncodeToString(sum[:6])
+}
+
+func ExternalAIFromProvider(p ExternalAIProviderConfig) ExternalAIConfig {
+	p = NormalizeExternalAIProvider(p)
+	return ExternalAIConfig{
+		BaseURL:     p.BaseURL,
+		APIKey:      p.APIKey,
+		Model:       p.Model,
+		Mode:        p.Mode,
+		Headers:     p.Headers,
+		MaxInflight: p.MaxInflight,
+		MaxQueue:    p.MaxQueue,
+	}
+}
+
+func ExternalAIProviderFromLegacy(id, name string, cfg ExternalAIConfig) ExternalAIProviderConfig {
+	cfg = NormalizeExternalAIConfig(cfg)
+	return NormalizeExternalAIProvider(ExternalAIProviderConfig{
+		ID:          id,
+		Name:        name,
+		BaseURL:     cfg.BaseURL,
+		APIKey:      cfg.APIKey,
+		Model:       cfg.Model,
+		Mode:        cfg.Mode,
+		Headers:     cfg.Headers,
+		MaxInflight: cfg.MaxInflight,
+		MaxQueue:    cfg.MaxQueue,
+	})
+}
+
+func normalizeExternalAIModeValue(mode string) string {
+	mode = strings.ToLower(strings.TrimSpace(mode))
+	switch mode {
+	case "openai", "claude", "gemini":
+		return mode
+	default:
+		return "auto"
+	}
 }
 
 type AutoDeleteConfig struct {

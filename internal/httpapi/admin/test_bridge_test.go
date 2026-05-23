@@ -5,14 +5,14 @@ import (
 	"net/http"
 	"testing"
 
-	"ds2api/internal/account"
-	"ds2api/internal/auth"
-	"ds2api/internal/config"
-	dsclient "ds2api/internal/deepseek/client"
-	adminaccounts "ds2api/internal/httpapi/admin/accounts"
-	adminconfig "ds2api/internal/httpapi/admin/configmgmt"
-	adminsettings "ds2api/internal/httpapi/admin/settings"
-	adminshared "ds2api/internal/httpapi/admin/shared"
+	"tool-gateway/internal/account"
+	"tool-gateway/internal/auth"
+	"tool-gateway/internal/config"
+	dsclient "tool-gateway/internal/deepseek/client"
+	adminaccounts "tool-gateway/internal/httpapi/admin/accounts"
+	adminconfig "tool-gateway/internal/httpapi/admin/configmgmt"
+	adminsettings "tool-gateway/internal/httpapi/admin/settings"
+	adminshared "tool-gateway/internal/httpapi/admin/shared"
 )
 
 var intFrom = adminshared.IntFrom

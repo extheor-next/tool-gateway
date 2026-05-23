@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"ds2api/internal/promptcompat"
+	"tool-gateway/internal/promptcompat"
 )
 
 func TestHandleResponsesStreamDoesNotEmitReasoningTextCompatEvents(t *testing.T) {

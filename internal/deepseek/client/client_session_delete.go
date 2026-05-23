@@ -2,13 +2,13 @@ package client
 
 import (
 	"context"
-	dsprotocol "ds2api/internal/deepseek/protocol"
+	dsprotocol "tool-gateway/internal/deepseek/protocol"
 	"errors"
 	"fmt"
 	"net/http"
 
-	"ds2api/internal/auth"
-	"ds2api/internal/config"
+	"tool-gateway/internal/auth"
+	"tool-gateway/internal/config"
 )
 
 // DeleteSessionResult 删除会话结果

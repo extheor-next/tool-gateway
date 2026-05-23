@@ -1,7 +1,7 @@
 package gemini
 
 import (
-	"ds2api/internal/promptcompat"
+	"tool-gateway/internal/promptcompat"
 	"strings"
 	"testing"
 )

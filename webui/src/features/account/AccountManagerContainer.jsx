@@ -1,33 +1,58 @@
+import { useMemo, useState } from 'react'
+
 import { useI18n } from '../../i18n'
-import { useAccountsData } from './useAccountsData'
 import { useAccountActions } from './useAccountActions'
-import QueueCards from './QueueCards'
 import ApiKeysPanel from './ApiKeysPanel'
 import AccountsTable from './AccountsTable'
 import AddKeyModal from './AddKeyModal'
-import AddAccountModal from './AddAccountModal'
-import EditAccountModal from './EditAccountModal'
+
+function providerToForm(provider) {
+    const headersText = Object.entries(provider?.headers || {}).map(([k, v]) => `${k}: ${v}`).join('\n')
+    return {
+        id: provider?.id || '',
+        name: provider?.name || '',
+        base_url: provider?.base_url || '',
+        api_key: '',
+        model: provider?.model || '',
+        mode: provider?.mode || 'auto',
+        max_inflight: provider?.max_inflight || 0,
+        max_queue: provider?.max_queue || 0,
+        headersText,
+    }
+}
+
+function formToProvider(form, prev = {}) {
+    const headers = {}
+    String(form.headersText || '').split('\n').forEach(line => {
+        const idx = line.indexOf(':')
+        if (idx < 0) return
+        const key = line.slice(0, idx).trim()
+        const value = line.slice(idx + 1).trim()
+        if (key && value) headers[key] = value
+    })
+    const next = {
+        id: form.id || prev.id || '',
+        name: form.name,
+        base_url: form.base_url,
+        api_key: form.api_key || (prev.has_api_key ? '' : ''),
+        model: form.model,
+        mode: form.mode,
+        max_inflight: Number(form.max_inflight) || 0,
+        max_queue: Number(form.max_queue) || 0,
+        headers,
+    }
+    if (!form.api_key && prev.api_key_preview) {
+        next.api_key = prev.api_key || ''
+    }
+    return next
+}
 
 export default function AccountManagerContainer({ config, onRefresh, onMessage, authFetch }) {
     const { t } = useI18n()
     const apiFetch = authFetch || fetch
-
-    const {
-        queueStatus,
-        keysExpanded,
-        setKeysExpanded,
-        accounts,
-        page,
-        pageSize,
-        totalPages,
-        totalAccounts,
-        loadingAccounts,
-        fetchAccounts,
-        changePageSize,
-        resolveAccountIdentifier,
-        searchQuery,
-        handleSearchChange,
-    } = useAccountsData({ apiFetch })
+    const [providerModalOpen, setProviderModalOpen] = useState(false)
+    const [editingProvider, setEditingProvider] = useState(null)
+    const [providerForm, setProviderForm] = useState(providerToForm(null))
 
     const {
         showAddKey,
@@ -35,46 +60,103 @@ export default function AccountManagerContainer({ config, onRefresh, onMessage, 
         openEditKey,
         closeKeyModal,
         editingKey,
-        showAddAccount,
-        openAddAccount,
-        closeAddAccount,
-        showEditAccount,
-        editingAccount,
-        editAccount,
-        setEditAccount,
-        openEditAccount,
-        closeEditAccount,
         newKey,
         setNewKey,
         copiedKey,
         setCopiedKey,
-        newAccount,
-        setNewAccount,
+        provider,
+        setProviderField,
+        refreshProviderFromConfig,
+        saveProvider,
+        savingProvider,
+        refreshingProvider,
         loading,
-        testing,
-        testingAll,
-        batchProgress,
-        sessionCounts,
-        deletingSessions,
-        updatingProxy,
         addKey,
         deleteKey,
-        addAccount,
-        updateAccount,
-        deleteAccount,
-        testAccount,
-        testAllAccounts,
-        deleteAllSessions,
-        updateAccountProxy,
     } = useAccountActions({
         apiFetch,
         t,
         onMessage,
         onRefresh,
         config,
-        fetchAccounts,
-        resolveAccountIdentifier,
     })
+
+    const providersConfig = config.external_ai_providers || { active: '', providers: [] }
+    const providerCount = providersConfig.providers?.length || 0
+
+    const openAddProvider = () => {
+        setEditingProvider(null)
+        setProviderForm(providerToForm(null))
+        setProviderModalOpen(true)
+    }
+
+    const openEditProvider = (item) => {
+        setEditingProvider(item)
+        setProviderForm(providerToForm(item))
+        setProviderModalOpen(true)
+    }
+
+    const closeProviderModal = () => {
+        setProviderModalOpen(false)
+        setEditingProvider(null)
+        setProviderForm(providerToForm(null))
+    }
+
+    const setProviderFieldLocal = (field, value) => {
+        setProviderForm(prev => ({ ...prev, [field]: value }))
+    }
+
+    const saveProviders = async () => {
+        const current = Array.isArray(providersConfig.providers) ? providersConfig.providers : []
+        const nextProviders = current.filter(item => item.id !== providerForm.id)
+        const nextItem = formToProvider(providerForm, editingProvider || {})
+        nextProviders.push(nextItem)
+        const payload = {
+            external_ai_providers: {
+                active: providerForm.id || editingProvider?.id || nextItem.id,
+                providers: nextProviders,
+            },
+        }
+        await apiFetch('/admin/config', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+        })
+        onRefresh()
+        closeProviderModal()
+    }
+
+    const deleteProvider = async (id) => {
+        if (!confirm(t('providerManager.deleteConfirm'))) return
+        const current = Array.isArray(providersConfig.providers) ? providersConfig.providers : []
+        const nextProviders = current.filter(item => item.id !== id)
+        const active = providersConfig.active === id ? (nextProviders[0]?.id || '') : providersConfig.active
+        await apiFetch('/admin/config', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                external_ai_providers: {
+                    active,
+                    providers: nextProviders,
+                },
+            }),
+        })
+        onRefresh()
+    }
+
+    const setActiveProvider = async (id) => {
+        await apiFetch('/admin/config', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                external_ai_providers: {
+                    active: id,
+                    providers: providersConfig.providers,
+                },
+            }),
+        })
+        onRefresh()
+    }
 
     return (
         <div className="space-y-6">
@@ -99,13 +181,9 @@ export default function AccountManagerContainer({ config, onRefresh, onMessage, 
                 </div>
             )}
 
-            <QueueCards queueStatus={queueStatus} t={t} />
-
             <ApiKeysPanel
                 t={t}
                 config={config}
-                keysExpanded={keysExpanded}
-                setKeysExpanded={setKeysExpanded}
                 onAddKey={openAddKey}
                 onEditKey={openEditKey}
                 copiedKey={copiedKey}
@@ -115,33 +193,14 @@ export default function AccountManagerContainer({ config, onRefresh, onMessage, 
 
             <AccountsTable
                 t={t}
-                accounts={accounts}
-                loadingAccounts={loadingAccounts}
-                testing={testing}
-                testingAll={testingAll}
-                batchProgress={batchProgress}
-                sessionCounts={sessionCounts}
-                deletingSessions={deletingSessions}
-                updatingProxy={updatingProxy}
-                totalAccounts={totalAccounts}
-                page={page}
-                pageSize={pageSize}
-                totalPages={totalPages}
-                resolveAccountIdentifier={resolveAccountIdentifier}
-                proxies={config?.proxies || []}
-                onTestAll={testAllAccounts}
-                onShowAddAccount={openAddAccount}
-                onEditAccount={openEditAccount}
-                onTestAccount={testAccount}
-                onDeleteAccount={deleteAccount}
-                onDeleteAllSessions={deleteAllSessions}
-                onUpdateAccountProxy={updateAccountProxy}
-                onPrevPage={() => fetchAccounts(page - 1)}
-                onNextPage={() => fetchAccounts(page + 1)}
-                onPageSizeChange={changePageSize}
-                searchQuery={searchQuery}
-                onSearchChange={handleSearchChange}
-                envBacked={Boolean(config?.env_backed)}
+                providersConfig={providersConfig}
+                onAddProvider={openAddProvider}
+                onEditProvider={openEditProvider}
+                onDeleteProvider={deleteProvider}
+                onSetActiveProvider={setActiveProvider}
+                onRefreshProvider={refreshProviderFromConfig}
+                refreshingProvider={refreshingProvider}
+                savingProvider={savingProvider}
             />
 
             <AddKeyModal
@@ -155,26 +214,61 @@ export default function AccountManagerContainer({ config, onRefresh, onMessage, 
                 onAdd={addKey}
             />
 
-            <AddAccountModal
-                show={showAddAccount}
-                t={t}
-                newAccount={newAccount}
-                setNewAccount={setNewAccount}
-                loading={loading}
-                onClose={closeAddAccount}
-                onAdd={addAccount}
-            />
-
-            <EditAccountModal
-                show={showEditAccount}
-                t={t}
-                editingAccount={editingAccount}
-                editAccount={editAccount}
-                setEditAccount={setEditAccount}
-                loading={loading}
-                onClose={closeEditAccount}
-                onSave={updateAccount}
-            />
+            {providerModalOpen && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+                    <div className="bg-card w-full max-w-lg rounded-xl border border-border shadow-2xl overflow-hidden">
+                        <div className="p-4 border-b border-border flex justify-between items-center">
+                            <h3 className="font-semibold">{editingProvider ? t('providerManager.editProvider') : t('providerManager.addProvider')}</h3>
+                            <button onClick={closeProviderModal} className="text-muted-foreground hover:text-foreground">×</button>
+                        </div>
+                        <div className="p-6 space-y-4">
+                            <div>
+                                <label className="block text-sm font-medium mb-1.5">{t('providerManager.nameLabel')}</label>
+                                <input className="input-field" value={providerForm.name} onChange={e => setProviderFieldLocal('name', e.target.value)} />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium mb-1.5">{t('providerManager.urlLabel')}</label>
+                                <input className="input-field" value={providerForm.base_url} onChange={e => setProviderFieldLocal('base_url', e.target.value)} />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium mb-1.5">{t('providerManager.apiKeyLabel')}</label>
+                                <input className="input-field" type="password" value={providerForm.api_key} onChange={e => setProviderFieldLocal('api_key', e.target.value)} />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium mb-1.5">{t('providerManager.modelLabel')}</label>
+                                <input className="input-field" value={providerForm.model} onChange={e => setProviderFieldLocal('model', e.target.value)} />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium mb-1.5">{t('providerManager.modeLabel')}</label>
+                                <select className="input-field" value={providerForm.mode} onChange={e => setProviderFieldLocal('mode', e.target.value)}>
+                                    <option value="auto">auto</option>
+                                    <option value="openai">openai</option>
+                                    <option value="claude">claude</option>
+                                    <option value="gemini">gemini</option>
+                                </select>
+                            </div>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-sm font-medium mb-1.5">{t('providerManager.maxInflightLabel')}</label>
+                                    <input className="input-field" type="number" min="0" value={providerForm.max_inflight} onChange={e => setProviderFieldLocal('max_inflight', e.target.value)} />
+                                    <p className="text-xs text-muted-foreground mt-1.5">{t('providerManager.maxInflightHelp')}</p>
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium mb-1.5">{t('providerManager.maxQueueLabel')}</label>
+                                    <input className="input-field" type="number" min="0" value={providerForm.max_queue} onChange={e => setProviderFieldLocal('max_queue', e.target.value)} />
+                                    <p className="text-xs text-muted-foreground mt-1.5">{t('providerManager.maxQueueHelp')}</p>
+                                </div>
+                            </div>
+                            <div className="flex justify-end gap-2 pt-2">
+                                <button onClick={closeProviderModal} className="px-4 py-2 rounded-lg border border-border hover:bg-secondary transition-colors text-sm font-medium">{t('actions.cancel')}</button>
+                                <button onClick={saveProviders} disabled={savingProvider} className="px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors text-sm font-medium disabled:opacity-50">
+                                    {savingProvider ? t('providerManager.saving') : t('providerManager.save')}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     )
 }

@@ -4,9 +4,9 @@ import (
 	"context"
 	"net/http"
 
-	"ds2api/internal/auth"
-	"ds2api/internal/config"
-	dsclient "ds2api/internal/deepseek/client"
+	"tool-gateway/internal/auth"
+	"tool-gateway/internal/config"
+	dsclient "tool-gateway/internal/deepseek/client"
 )
 
 type AuthResolver interface {

@@ -3,7 +3,7 @@ package shared
 import (
 	"strings"
 
-	"ds2api/internal/sse"
+	"tool-gateway/internal/sse"
 )
 
 type StreamAccumulator struct {

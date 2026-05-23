@@ -1,6 +1,6 @@
 package settings
 
-import "ds2api/internal/config"
+import "tool-gateway/internal/config"
 
 func validateMergedRuntimeSettings(current config.RuntimeConfig, incoming *config.RuntimeConfig) error {
 	merged := current

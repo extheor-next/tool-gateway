@@ -1,7 +1,7 @@
 package toolstream
 
 import (
-	"ds2api/internal/toolcall"
+	"tool-gateway/internal/toolcall"
 	"strings"
 	"testing"
 )
@@ -320,7 +320,7 @@ func TestProcessToolSieveKeepsCDATAEmbeddedToolClosingBuffered(t *testing.T) {
 		"<tool_calls>\n  <invoke name=\"Write\">\n    <parameter name=\"content\"><![CDATA[",
 		payload[:innerClose],
 		payload[innerClose:],
-		"]]></parameter>\n    <parameter name=\"file_path\">DS2API-4.0-Release-Notes.md</parameter>\n  </invoke>\n</tool_calls>",
+		"]]></parameter>\n    <parameter name=\"file_path\">Tool Gateway-4.0-Release-Notes.md</parameter>\n  </invoke>\n</tool_calls>",
 	}
 
 	var events []Event
@@ -1130,11 +1130,11 @@ func TestProcessToolSieveFullwidthDSMLPrefixVariantDoesNotLeak(t *testing.T) {
 		"<|DSML|tool",
 		"_calls>\n",
 		"<|DSML|invoke name=\"Bash\">\n",
-		"<|DSML|parameter name=\"command\"><![CDATA[ls -la /Users/aq/Desktop/myproject/ds2api/]]></|DSML|parameter>\n",
+		"<|DSML|parameter name=\"command\"><![CDATA[ls -la /Users/aq/Desktop/myproject/tool-gateway/]]></|DSML|parameter>\n",
 		"<|DSML|parameter name=\"description\"><![CDATA[List project root contents]]></|DSML|parameter>\n",
 		"</|DSML|invoke>\n",
 		"<|DSML|invoke name=\"Bash\">\n",
-		"<|DSML|parameter name=\"command\"><![CDATA[cat /Users/aq/Desktop/myproject/ds2api/package.json 2>/dev/null || echo \"No package.json found\"]]></|DSML|parameter>\n",
+		"<|DSML|parameter name=\"command\"><![CDATA[cat /Users/aq/Desktop/myproject/tool-gateway/package.json 2>/dev/null || echo \"No package.json found\"]]></|DSML|parameter>\n",
 		"<|DSML|parameter name=\"description\"><![CDATA[Check for existing package.json]]></|DSML|parameter>\n",
 		"</|DSML|invoke>\n",
 		"</|DSML|tool_calls>",

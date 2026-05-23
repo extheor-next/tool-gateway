@@ -4,7 +4,7 @@ import (
 	"sync"
 	"time"
 
-	"ds2api/internal/auth"
+	"tool-gateway/internal/auth"
 )
 
 type storedResponse struct {

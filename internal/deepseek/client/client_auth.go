@@ -2,15 +2,15 @@ package client
 
 import (
 	"context"
-	dsprotocol "ds2api/internal/deepseek/protocol"
+	dsprotocol "tool-gateway/internal/deepseek/protocol"
 	"errors"
 	"fmt"
 	"net/http"
 	"strings"
 	"unicode"
 
-	"ds2api/internal/auth"
-	"ds2api/internal/config"
+	"tool-gateway/internal/auth"
+	"tool-gateway/internal/config"
 )
 
 func (c *Client) Login(ctx context.Context, acc config.Account) (string, error) {

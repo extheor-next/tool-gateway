@@ -376,8 +376,8 @@ Parameters: ...
 {
   "prompt": "<|begin▁of▁sentence|><|System|>原 system / developer\n\nTOOL CALL FORMAT — FOLLOW EXACTLY: ...<|end▁of▁instructions|><|User|>Continue from the latest state in the attached TOOL_GATEWAY_HISTORY.txt context. Treat it as the current working state and answer the latest user request directly. Available tool descriptions and parameter schemas are attached in TOOL_GATEWAY_TOOLS.txt; use only those tools and follow the tool-call format rules in this prompt.<|Assistant|>",
   "ref_file_ids": [
-    "file-ds2api-history",
-    "file-ds2api-tools",
+    "file-tool-gateway-history",
+    "file-tool-gateway-tools",
     "file-systemprompt",
     "file-other-attachment"
   ],

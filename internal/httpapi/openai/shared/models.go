@@ -6,7 +6,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"ds2api/internal/config"
+	"tool-gateway/internal/config"
 )
 
 type ModelsHandler struct {

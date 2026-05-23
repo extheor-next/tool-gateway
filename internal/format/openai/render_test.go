@@ -5,8 +5,8 @@ import (
 	"strings"
 	"testing"
 
-	"ds2api/internal/toolcall"
-	"ds2api/internal/util"
+	"tool-gateway/internal/toolcall"
+	"tool-gateway/internal/util"
 )
 
 func TestBuildResponseObjectKeepsFencedToolPayloadAsText(t *testing.T) {

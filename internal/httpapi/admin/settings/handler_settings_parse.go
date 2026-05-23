@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"ds2api/internal/config"
+	"tool-gateway/internal/config"
 )
 
 func boolFrom(v any) bool {

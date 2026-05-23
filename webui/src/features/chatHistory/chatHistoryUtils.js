@@ -1,7 +1,7 @@
 export const LIMIT_OPTIONS = [0, 10, 20, 50]
 export const DISABLED_LIMIT = 0
 export const MESSAGE_COLLAPSE_AT = 700
-export const VIEW_MODE_KEY = 'ds2api_chat_history_view_mode'
+export const VIEW_MODE_KEY = 'tool-gateway_chat_history_view_mode'
 
 const BEGIN_SENTENCE_MARKER = '<|begin▁of▁sentence|>'
 const SYSTEM_MARKER = '<|System|>'

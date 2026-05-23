@@ -3,7 +3,7 @@ package client
 import (
 	"bytes"
 	"context"
-	dsprotocol "ds2api/internal/deepseek/protocol"
+	dsprotocol "tool-gateway/internal/deepseek/protocol"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -14,9 +14,9 @@ import (
 	"strconv"
 	"strings"
 
-	"ds2api/internal/auth"
-	"ds2api/internal/config"
-	trans "ds2api/internal/deepseek/transport"
+	"tool-gateway/internal/auth"
+	"tool-gateway/internal/config"
+	trans "tool-gateway/internal/deepseek/transport"
 )
 
 type UploadFileRequest struct {

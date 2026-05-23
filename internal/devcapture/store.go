@@ -10,7 +10,7 @@ import (
 	"sync"
 	"time"
 
-	"ds2api/internal/util"
+	"tool-gateway/internal/util"
 
 	"github.com/google/uuid"
 )

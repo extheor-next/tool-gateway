@@ -4,8 +4,8 @@ import (
 	"net/http"
 	"testing"
 
-	"ds2api/internal/promptcompat"
-	"ds2api/internal/sse"
+	"tool-gateway/internal/promptcompat"
+	"tool-gateway/internal/sse"
 )
 
 func TestBuildTurnFromCollectedTextCitation(t *testing.T) {

@@ -14,22 +14,22 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 
-	"ds2api/internal/account"
-	"ds2api/internal/auth"
-	"ds2api/internal/chathistory"
-	"ds2api/internal/config"
-	"ds2api/internal/httpapi/admin"
-	"ds2api/internal/httpapi/claude"
-	"ds2api/internal/httpapi/gemini"
-	"ds2api/internal/httpapi/ollama"
-	"ds2api/internal/httpapi/openai/chat"
-	"ds2api/internal/httpapi/openai/embeddings"
-	"ds2api/internal/httpapi/openai/files"
-	"ds2api/internal/httpapi/openai/responses"
-	"ds2api/internal/httpapi/openai/shared"
-	"ds2api/internal/httpapi/requestbody"
-	"ds2api/internal/llm"
-	"ds2api/internal/webui"
+	"tool-gateway/internal/account"
+	"tool-gateway/internal/auth"
+	"tool-gateway/internal/chathistory"
+	"tool-gateway/internal/config"
+	"tool-gateway/internal/httpapi/admin"
+	"tool-gateway/internal/httpapi/claude"
+	"tool-gateway/internal/httpapi/gemini"
+	"tool-gateway/internal/httpapi/ollama"
+	"tool-gateway/internal/httpapi/openai/chat"
+	"tool-gateway/internal/httpapi/openai/embeddings"
+	"tool-gateway/internal/httpapi/openai/files"
+	"tool-gateway/internal/httpapi/openai/responses"
+	"tool-gateway/internal/httpapi/openai/shared"
+	"tool-gateway/internal/httpapi/requestbody"
+	"tool-gateway/internal/llm"
+	"tool-gateway/internal/webui"
 )
 
 type App struct {
@@ -95,7 +95,7 @@ func NewApp() (*App, error) {
 	r.Post("/v1/files", filesHandler.UploadFile)
 	r.Get("/v1/files/{file_id}", filesHandler.RetrieveFile)
 	r.Post("/v1/embeddings", embeddingsHandler.Embeddings)
-	// Root OpenAI aliases support clients configured with the bare DS2API service URL.
+	// Root OpenAI aliases support clients configured with the bare Tool Gateway service URL.
 	r.Get("/models", modelsHandler.ListModels)
 	r.Get("/models/{model_id}", modelsHandler.GetModel)
 	r.Post("/chat/completions", chatHandler.ChatCompletions)

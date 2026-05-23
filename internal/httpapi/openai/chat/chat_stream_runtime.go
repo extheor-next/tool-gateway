@@ -5,13 +5,13 @@ import (
 	"net/http"
 	"strings"
 
-	"ds2api/internal/assistantturn"
-	openaifmt "ds2api/internal/format/openai"
-	"ds2api/internal/httpapi/openai/shared"
-	"ds2api/internal/promptcompat"
-	"ds2api/internal/sse"
-	streamengine "ds2api/internal/stream"
-	"ds2api/internal/toolstream"
+	"tool-gateway/internal/assistantturn"
+	openaifmt "tool-gateway/internal/format/openai"
+	"tool-gateway/internal/httpapi/openai/shared"
+	"tool-gateway/internal/promptcompat"
+	"tool-gateway/internal/sse"
+	streamengine "tool-gateway/internal/stream"
+	"tool-gateway/internal/toolstream"
 )
 
 type chatStreamRuntime struct {

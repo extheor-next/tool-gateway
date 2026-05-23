@@ -1,7 +1,7 @@
 package claude
 
 import (
-	"ds2api/internal/toolcall"
+	"tool-gateway/internal/toolcall"
 	"fmt"
 	"strings"
 )

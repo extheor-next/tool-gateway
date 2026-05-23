@@ -39,7 +39,7 @@ export default function BatchImport({ onRefresh, onMessage, authFetch }) {
             const data = await res.json()
             if (res.ok) {
                 setResult(data)
-                onMessage('success', t('batchImport.importSuccess', { keys: data.imported_keys, accounts: data.imported_accounts }))
+                onMessage('success', t('batchImport.importSuccess', { keys: data.imported_keys, accounts: data.imported_accounts, provider: data.imported_external_ai || 0 }))
                 onRefresh()
             } else {
                 onMessage('error', data.detail || t('messages.importFailed'))
@@ -53,10 +53,26 @@ export default function BatchImport({ onRefresh, onMessage, authFetch }) {
 
     const loadTemplate = (key) => {
         const tpl = templates[key]
-        if (tpl) {
-            setJsonInput(JSON.stringify(tpl.config, null, 2))
-            onMessage('info', t('batchImport.templateLoaded', { name: tpl.name }))
-        }
+        if (!tpl) return
+        const config = key === 'full' ? {
+            keys: ['your-gateway-api-key'],
+            external_ai_providers: {
+                active: 'openai-main',
+                providers: [
+                    {
+                        id: 'openai-main',
+                        name: 'OpenAI Main',
+                        base_url: 'https://api.openai.com/v1',
+                        api_key: 'sk-your-upstream-key',
+                        model: 'gpt-4o-mini',
+                        mode: 'openai',
+                        headers: {},
+                    },
+                ],
+            },
+        } : tpl.config
+        setJsonInput(JSON.stringify(config, null, 2))
+        onMessage('info', t('batchImport.templateLoaded', { name: tpl.name }))
     }
 
     const handleExport = async () => {
@@ -153,7 +169,7 @@ export default function BatchImport({ onRefresh, onMessage, authFetch }) {
                         className="absolute inset-0 w-full h-full p-4 font-mono text-sm bg-[#09090b] text-foreground resize-none focus:outline-none custom-scrollbar"
                         value={jsonInput}
                         onChange={e => setJsonInput(e.target.value)}
-                        placeholder={'{\n  "keys": ["your-api-key"],\n  "accounts": [\n    {"email": "...", "password": "...", "token": ""}\n  ]\n}'}
+                        placeholder={'{\n  "keys": ["your-gateway-api-key"],\n  "external_ai_providers": {\n    "active": "openai-main",\n    "providers": [\n      {\n        "id": "openai-main",\n        "name": "OpenAI Main",\n        "base_url": "https://api.openai.com/v1",\n        "api_key": "sk-your-upstream-key",\n        "model": "gpt-4o-mini",\n        "mode": "openai"\n      }\n    ]\n  }\n}'}
                         spellCheck={false}
                     />
                 </div>
@@ -161,20 +177,18 @@ export default function BatchImport({ onRefresh, onMessage, authFetch }) {
                 {result && (
                     <div className={clsx(
                         "p-4 border-t",
-                        result.imported_keys || result.imported_accounts ? "bg-emerald-500/10 border-emerald-500/20" : "bg-destructive/10 border-destructive/20"
+                        result.imported_keys || result.imported_accounts || result.imported_external_ai ? "bg-emerald-500/10 border-emerald-500/20" : "bg-destructive/10 border-destructive/20"
                     )}>
                         <div className="flex items-start gap-3">
-                            {result.imported_keys || result.imported_accounts ? (
+                            {result.imported_keys || result.imported_accounts || result.imported_external_ai ? (
                                 <Check className="w-5 h-5 text-emerald-500 mt-0.5" />
                             ) : (
                                 <AlertTriangle className="w-5 h-5 text-destructive mt-0.5" />
                             )}
                             <div>
-                                <h4 className={clsx("font-medium", result.imported_keys || result.imported_accounts ? "text-emerald-500" : "text-destructive")}>
-                                    {t('batchImport.importComplete')}
-                                </h4>
+                                <h4 className={clsx("font-medium", result.imported_keys || result.imported_accounts || result.imported_external_ai ? "text-emerald-500" : "text-destructive")}>{t('batchImport.importComplete')}</h4>
                                 <p className="text-sm opacity-80 mt-1">
-                                    {t('batchImport.importSummary', { keys: result.imported_keys, accounts: result.imported_accounts })}
+                                    {t('batchImport.importSummary', { keys: result.imported_keys, accounts: result.imported_accounts, provider: result.imported_external_ai || 0 })}
                                 </p>
                             </div>
                         </div>

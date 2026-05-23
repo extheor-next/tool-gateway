@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	"ds2api/internal/account"
-	"ds2api/internal/config"
+	"tool-gateway/internal/account"
+	"tool-gateway/internal/config"
 )
 
 func newTestResolver(t *testing.T) *Resolver {

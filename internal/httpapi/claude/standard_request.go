@@ -4,10 +4,10 @@ import (
 	"fmt"
 	"strings"
 
-	"ds2api/internal/config"
-	"ds2api/internal/prompt"
-	"ds2api/internal/promptcompat"
-	"ds2api/internal/util"
+	"tool-gateway/internal/config"
+	"tool-gateway/internal/prompt"
+	"tool-gateway/internal/promptcompat"
+	"tool-gateway/internal/util"
 )
 
 type claudeNormalizedRequest struct {

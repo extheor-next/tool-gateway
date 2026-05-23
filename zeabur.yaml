@@ -2,7 +2,7 @@
 apiVersion: zeabur.com/v1
 kind: Template
 metadata:
-  name: DS2API
+  name: Tool Gateway
 spec:
   description: DeepSeek Web 对话转 OpenAI/Claude/Gemini 兼容 API（Go 实现，含 WebUI）
   tags:
@@ -25,10 +25,10 @@ spec:
     1. Open your service URL, then visit `/admin`
     2. Login with `TOOL_GATEWAY_ADMIN_KEY` (shown in Zeabur env/instructions)
     3. Import / edit config in Admin UI (saved to `/data/config.json`)
-    4. On a fresh volume, DS2API starts with an empty config and creates `/data/config.json` on the first save
+    4. On a fresh volume, Tool Gateway starts with an empty config and creates `/data/config.json` on the first save
 
   services:
-    - name: ds2api
+    - name: tool-gateway
       template: GIT
       spec:
         source:
@@ -56,7 +56,7 @@ spec:
         instructions:
           - title: Admin panel
             content: Visit `/admin` on your service URL.
-          - title: DS2API admin key
+          - title: Tool Gateway admin key
             content: ${TOOL_GATEWAY_ADMIN_KEY}
         healthCheck:
           type: HTTP

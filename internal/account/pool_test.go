@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"ds2api/internal/config"
+	"tool-gateway/internal/config"
 )
 
 func newPoolForTest(t *testing.T, maxInflight string) *Pool {

@@ -11,7 +11,7 @@ OUT_DIR="${ROOT_DIR}/.tmp/cross-build"
 build_one() {
   local goos="$1" goarch="$2" goarm="$3" label="$4"
   local out
-  out="${OUT_DIR}/${label}/ds2api"
+  out="${OUT_DIR}/${label}/tool-gateway"
   if [[ "$goos" == "windows" ]]; then
     out="${out}.exe"
   fi

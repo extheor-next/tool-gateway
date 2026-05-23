@@ -7,9 +7,9 @@ import (
 	"testing"
 	"time"
 
-	"ds2api/internal/chathistory"
-	"ds2api/internal/promptcompat"
-	"ds2api/internal/stream"
+	"tool-gateway/internal/chathistory"
+	"tool-gateway/internal/promptcompat"
+	"tool-gateway/internal/stream"
 )
 
 func TestConsumeChatStreamAttemptMarksContextCancelledState(t *testing.T) {

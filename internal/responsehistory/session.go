@@ -6,12 +6,12 @@ import (
 	"strings"
 	"time"
 
-	"ds2api/internal/assistantturn"
-	"ds2api/internal/auth"
-	"ds2api/internal/chathistory"
-	"ds2api/internal/config"
-	"ds2api/internal/prompt"
-	"ds2api/internal/promptcompat"
+	"tool-gateway/internal/assistantturn"
+	"tool-gateway/internal/auth"
+	"tool-gateway/internal/chathistory"
+	"tool-gateway/internal/config"
+	"tool-gateway/internal/prompt"
+	"tool-gateway/internal/promptcompat"
 )
 
 type Session struct {

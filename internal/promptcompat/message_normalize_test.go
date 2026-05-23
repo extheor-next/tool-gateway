@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"ds2api/internal/util"
+	"tool-gateway/internal/util"
 )
 
 func TestNormalizeOpenAIMessagesForPrompt_AssistantToolCallsAndToolResult(t *testing.T) {

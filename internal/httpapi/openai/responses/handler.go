@@ -5,14 +5,14 @@ import (
 	"net/http"
 	"sync"
 
-	"ds2api/internal/auth"
-	"ds2api/internal/chathistory"
-	"ds2api/internal/httpapi/openai/files"
-	"ds2api/internal/httpapi/openai/history"
-	"ds2api/internal/httpapi/openai/shared"
-	"ds2api/internal/promptcompat"
-	"ds2api/internal/textclean"
-	"ds2api/internal/toolstream"
+	"tool-gateway/internal/auth"
+	"tool-gateway/internal/chathistory"
+	"tool-gateway/internal/httpapi/openai/files"
+	"tool-gateway/internal/httpapi/openai/history"
+	"tool-gateway/internal/httpapi/openai/shared"
+	"tool-gateway/internal/promptcompat"
+	"tool-gateway/internal/textclean"
+	"tool-gateway/internal/toolstream"
 )
 
 const openAIGeneralMaxSize = shared.GeneralMaxSize

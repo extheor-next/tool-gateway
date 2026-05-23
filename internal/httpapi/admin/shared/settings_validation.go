@@ -3,7 +3,7 @@ package shared
 import (
 	"strings"
 
-	"ds2api/internal/config"
+	"tool-gateway/internal/config"
 )
 
 func normalizeSettingsConfig(c *config.Config) {

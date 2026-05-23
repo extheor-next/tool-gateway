@@ -84,8 +84,6 @@ export default function ApiTesterContainer({ config, onMessage, authFetch }) {
         setAttachedFiles,
         apiKey,
         setApiKey,
-        selectedAccount,
-        setSelectedAccount,
         response,
         setResponse,
         loading,
@@ -103,11 +101,7 @@ export default function ApiTesterContainer({ config, onMessage, authFetch }) {
         abortControllerRef,
     } = useApiTesterState({ t })
 
-    const accounts = config.accounts || []
-    const resolveAccountIdentifier = (acc) => {
-        if (!acc || typeof acc !== 'object') return ''
-        return String(acc.identifier || acc.email || acc.mobile || '').trim()
-    }
+    const provider = config.external_ai || {}
     const configuredKeys = config.keys || []
     const trimmedApiKey = apiKey.trim()
     const defaultKey = configuredKeys[0] || ''
@@ -174,7 +168,6 @@ export default function ApiTesterContainer({ config, onMessage, authFetch }) {
         model,
         message,
         effectiveKey,
-        selectedAccount,
         streamingMode,
         attachedFiles,
         abortControllerRef,
@@ -197,10 +190,7 @@ export default function ApiTesterContainer({ config, onMessage, authFetch }) {
                 modelsLoaded={modelsLoaded}
                 streamingMode={streamingMode}
                 setStreamingMode={setStreamingMode}
-                selectedAccount={selectedAccount}
-                setSelectedAccount={setSelectedAccount}
-                accounts={accounts}
-                resolveAccountIdentifier={resolveAccountIdentifier}
+                provider={provider}
                 apiKey={apiKey}
                 setApiKey={setApiKey}
                 config={config}
@@ -214,9 +204,7 @@ export default function ApiTesterContainer({ config, onMessage, authFetch }) {
                 setMessage={setMessage}
                 attachedFiles={attachedFiles}
                 setAttachedFiles={setAttachedFiles}
-                setSelectedAccount={setSelectedAccount}
                 effectiveKey={effectiveKey}
-                selectedAccount={selectedAccount}
                 model={model}
                 onMessage={onMessage}
                 response={response}

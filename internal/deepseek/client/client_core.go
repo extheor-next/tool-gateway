@@ -6,11 +6,11 @@ import (
 	"sync"
 	"time"
 
-	"ds2api/internal/auth"
-	"ds2api/internal/config"
-	trans "ds2api/internal/deepseek/transport"
-	"ds2api/internal/devcapture"
-	"ds2api/internal/util"
+	"tool-gateway/internal/auth"
+	"tool-gateway/internal/config"
+	trans "tool-gateway/internal/deepseek/transport"
+	"tool-gateway/internal/devcapture"
+	"tool-gateway/internal/util"
 )
 
 // intFrom is a package-internal alias for the shared util version.

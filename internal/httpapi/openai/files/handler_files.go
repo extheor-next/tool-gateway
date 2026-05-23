@@ -10,11 +10,11 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"ds2api/internal/auth"
-	"ds2api/internal/chathistory"
-	"ds2api/internal/config"
-	dsclient "ds2api/internal/deepseek/client"
-	"ds2api/internal/httpapi/openai/shared"
+	"tool-gateway/internal/auth"
+	"tool-gateway/internal/chathistory"
+	"tool-gateway/internal/config"
+	dsclient "tool-gateway/internal/deepseek/client"
+	"tool-gateway/internal/httpapi/openai/shared"
 )
 
 const openAIUploadMaxMemory = 32 << 20

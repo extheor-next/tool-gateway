@@ -13,8 +13,8 @@ import (
 
 	"github.com/google/uuid"
 
-	"ds2api/internal/config"
-	"ds2api/internal/util"
+	"tool-gateway/internal/config"
+	"tool-gateway/internal/util"
 )
 
 const (

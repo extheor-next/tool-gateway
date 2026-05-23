@@ -12,7 +12,7 @@ import (
 	"testing"
 	"unicode/utf8"
 
-	"ds2api/internal/devcapture"
+	"tool-gateway/internal/devcapture"
 )
 
 type stubOpenAIChatCaller struct{}

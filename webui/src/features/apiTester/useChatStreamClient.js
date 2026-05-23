@@ -1,14 +1,11 @@
 import { useCallback } from 'react'
 
-import { getAttachedFileAccountIds } from './fileAccountBinding'
-
 export function useChatStreamClient({
     t,
     onMessage,
     model,
     message,
     effectiveKey,
-    selectedAccount,
     streamingMode,
     attachedFiles,
     abortControllerRef,
@@ -49,20 +46,6 @@ export function useChatStreamClient({
         }
     }, [t])
 
-    const resolveAttachmentAccount = useCallback(() => {
-        const ids = getAttachedFileAccountIds(attachedFiles)
-        if (ids.length > 1) {
-            return {
-                accountId: '',
-                error: t('apiTester.fileAccountConflict'),
-            }
-        }
-        return {
-            accountId: ids[0] || '',
-            error: '',
-        }
-    }, [attachedFiles, t])
-
     const extractStreamError = useCallback((json) => {
         const error = json?.error
         if (!error || typeof error !== 'object') {
@@ -101,31 +84,9 @@ export function useChatStreamClient({
         abortControllerRef.current = new AbortController()
 
         try {
-            const selectedAccountId = String(selectedAccount || '').trim()
-            const attachmentBinding = resolveAttachmentAccount()
-            if (attachmentBinding.error) {
-                setResponse({ success: false, error: attachmentBinding.error })
-                onMessage('error', attachmentBinding.error)
-                setLoading(false)
-                setIsStreaming(false)
-                return
-            }
-            if (attachmentBinding.accountId && selectedAccountId && selectedAccountId !== attachmentBinding.accountId) {
-                const errorMsg = t('apiTester.fileAccountMismatch', { account: attachmentBinding.accountId })
-                setResponse({ success: false, error: errorMsg })
-                onMessage('error', errorMsg)
-                setLoading(false)
-                setIsStreaming(false)
-                return
-            }
-            const requestAccount = selectedAccountId || attachmentBinding.accountId
-
             const headers = {
                 'Content-Type': 'application/json',
                 'Authorization': `Bearer ${effectiveKey}`,
-            }
-            if (requestAccount) {
-                headers['X-Tool-Gateway-Target-Account'] = requestAccount
             }
 
             const body = {
@@ -236,12 +197,12 @@ export function useChatStreamClient({
                         },
                     }],
                 })
-                onMessage('success', t('apiTester.requestSuccess', { account: requestAccount || selectedAccountId || 'Auto', time: Math.max(0, Date.now() - startedAt) }))
+                onMessage('success', t('apiTester.requestSuccess', { time: Math.max(0, Date.now() - startedAt) }))
             } else {
                 const data = await res.json()
                 setResponse({ success: true, status_code: res.status, ...data })
                 const elapsed = Math.max(0, Date.now() - startedAt)
-                onMessage('success', t('apiTester.requestSuccess', { account: requestAccount || 'Auto', time: elapsed }))
+                onMessage('success', t('apiTester.requestSuccess', { time: elapsed }))
             }
         } catch (e) {
             if (e.name === 'AbortError') {
@@ -264,8 +225,6 @@ export function useChatStreamClient({
         message,
         model,
         onMessage,
-        resolveAttachmentAccount,
-        selectedAccount,
         setIsStreaming,
         setLoading,
         setResponse,

@@ -3,8 +3,8 @@ package configmgmt
 import (
 	"testing"
 
-	"ds2api/internal/account"
-	"ds2api/internal/config"
+	"tool-gateway/internal/account"
+	"tool-gateway/internal/config"
 )
 
 func newAdminTestHandler(t *testing.T, raw string) *Handler {

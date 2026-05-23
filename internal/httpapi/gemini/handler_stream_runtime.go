@@ -8,14 +8,14 @@ import (
 	"strings"
 	"time"
 
-	"ds2api/internal/assistantturn"
-	"ds2api/internal/auth"
-	"ds2api/internal/completionruntime"
-	dsprotocol "ds2api/internal/deepseek/protocol"
-	"ds2api/internal/promptcompat"
-	"ds2api/internal/responsehistory"
-	"ds2api/internal/sse"
-	streamengine "ds2api/internal/stream"
+	"tool-gateway/internal/assistantturn"
+	"tool-gateway/internal/auth"
+	"tool-gateway/internal/completionruntime"
+	dsprotocol "tool-gateway/internal/deepseek/protocol"
+	"tool-gateway/internal/promptcompat"
+	"tool-gateway/internal/responsehistory"
+	"tool-gateway/internal/sse"
+	streamengine "tool-gateway/internal/stream"
 )
 
 //nolint:unused // retained for native Gemini stream handling path.

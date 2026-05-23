@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
-	"ds2api/internal/httpapi/openai/embeddings"
-	"ds2api/internal/promptcompat"
+	"tool-gateway/internal/httpapi/openai/embeddings"
+	"tool-gateway/internal/promptcompat"
 )
 
 func TestNormalizeResponsesInputAsMessagesString(t *testing.T) {

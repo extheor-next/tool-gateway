@@ -1,6 +1,6 @@
 package toolstream
 
-import "ds2api/internal/toolcall"
+import "tool-gateway/internal/toolcall"
 
 func findFirstToolMarkupTagByName(s string, start int, name string) (toolcall.ToolMarkupTag, bool) {
 	return findFirstToolMarkupTagByNameFrom(s, start, name, false)

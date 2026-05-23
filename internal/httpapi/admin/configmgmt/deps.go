@@ -1,9 +1,9 @@
 package configmgmt
 
 import (
-	"ds2api/internal/chathistory"
-	"ds2api/internal/config"
-	adminshared "ds2api/internal/httpapi/admin/shared"
+	"tool-gateway/internal/chathistory"
+	"tool-gateway/internal/config"
+	adminshared "tool-gateway/internal/httpapi/admin/shared"
 )
 
 type Handler struct {

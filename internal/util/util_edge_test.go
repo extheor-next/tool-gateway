@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"ds2api/internal/config"
+	"tool-gateway/internal/config"
 )
 
 // ─── EstimateTokens edge cases ───────────────────────────────────────

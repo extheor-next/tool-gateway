@@ -7,14 +7,14 @@ import (
 	"net/http"
 	"strings"
 
-	"ds2api/internal/assistantturn"
-	"ds2api/internal/auth"
-	"ds2api/internal/config"
-	dsclient "ds2api/internal/deepseek/client"
-	"ds2api/internal/httpapi/openai/history"
-	"ds2api/internal/httpapi/openai/shared"
-	"ds2api/internal/promptcompat"
-	"ds2api/internal/sse"
+	"tool-gateway/internal/assistantturn"
+	"tool-gateway/internal/auth"
+	"tool-gateway/internal/config"
+	dsclient "tool-gateway/internal/deepseek/client"
+	"tool-gateway/internal/httpapi/openai/history"
+	"tool-gateway/internal/httpapi/openai/shared"
+	"tool-gateway/internal/promptcompat"
+	"tool-gateway/internal/sse"
 )
 
 type CompletionBackend interface {
@@ -274,7 +274,7 @@ func authOutputError(a *auth.RequestAuth) *assistantturn.OutputError {
 	if a != nil && a.UseConfigToken {
 		return &assistantturn.OutputError{Status: http.StatusUnauthorized, Message: "Account token is invalid. Please re-login the account in admin.", Code: "error"}
 	}
-	return &assistantturn.OutputError{Status: http.StatusUnauthorized, Message: "Invalid token. If this should be a DS2API key, add it to config.keys first.", Code: "error"}
+	return &assistantturn.OutputError{Status: http.StatusUnauthorized, Message: "Invalid token. If this should be a Tool Gateway key, add it to config.keys first.", Code: "error"}
 }
 
 func Errorf(status int, format string, args ...any) *assistantturn.OutputError {

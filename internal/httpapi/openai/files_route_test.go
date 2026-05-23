@@ -12,8 +12,8 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"ds2api/internal/auth"
-	dsclient "ds2api/internal/deepseek/client"
+	"tool-gateway/internal/auth"
+	dsclient "tool-gateway/internal/deepseek/client"
 )
 
 type managedFilesAuthStub struct{}

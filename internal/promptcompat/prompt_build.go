@@ -1,7 +1,7 @@
 package promptcompat
 
 import (
-	"ds2api/internal/prompt"
+	"tool-gateway/internal/prompt"
 )
 
 func buildOpenAIFinalPrompt(messagesRaw []any, toolsRaw any, traceID string, thinkingEnabled bool) (string, []string) {

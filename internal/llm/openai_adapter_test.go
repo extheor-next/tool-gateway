@@ -8,8 +8,8 @@ import (
 	"strings"
 	"testing"
 
-	"ds2api/internal/auth"
-	"ds2api/internal/config"
+	"tool-gateway/internal/auth"
+	"tool-gateway/internal/config"
 )
 
 type roundTripFunc func(*http.Request) (*http.Response, error)
@@ -133,6 +133,8 @@ func TestOpenAIAdapterCallCompletionReturnsUpstreamErrorResponse(t *testing.T) {
 }
 
 func TestOpenAIAdapterCallCompletionRequiresConfig(t *testing.T) {
+	t.Setenv("EXTERNAL_AI_BASE_URL", "")
+	t.Setenv("EXTERNAL_AI_API_KEY", "")
 	adapter := NewOpenAIAdapter(nil)
 	_, err := adapter.CallCompletion(context.Background(), nil, map[string]any{"prompt": "hello"}, "", 1)
 	if err == nil || !strings.Contains(err.Error(), "base_url") {

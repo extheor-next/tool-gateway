@@ -11,11 +11,11 @@ import (
 	"sync"
 	"time"
 
-	authn "ds2api/internal/auth"
-	"ds2api/internal/config"
-	"ds2api/internal/prompt"
-	"ds2api/internal/promptcompat"
-	"ds2api/internal/sse"
+	authn "tool-gateway/internal/auth"
+	"tool-gateway/internal/config"
+	"tool-gateway/internal/prompt"
+	"tool-gateway/internal/promptcompat"
+	"tool-gateway/internal/sse"
 )
 
 type modelAliasSnapshotReader struct {

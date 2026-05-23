@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"ds2api/internal/promptcompat"
+	"tool-gateway/internal/promptcompat"
 )
 
 func TestChatStreamKeepAliveUsesCommentOnly(t *testing.T) {

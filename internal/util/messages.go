@@ -1,9 +1,9 @@
 package util
 
 import (
-	"ds2api/internal/claudeconv"
-	"ds2api/internal/config"
-	"ds2api/internal/prompt"
+	"tool-gateway/internal/claudeconv"
+	"tool-gateway/internal/config"
+	"tool-gateway/internal/prompt"
 )
 
 const ClaudeDefaultModel = "claude-sonnet-4-6"

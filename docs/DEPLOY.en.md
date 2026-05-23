@@ -66,7 +66,7 @@ Built-in GitHub Actions workflow: `.github/workflows/release-artifacts.yml`
 
 - **Trigger**: by default only on Release `published`; you can also run it manually via `workflow_dispatch` and pass `release_tag` to rerun / backfill
 - **Outputs**: multi-platform binary archives, Linux Docker image export tarballs, and `sha256sums.txt`
-- **Container publishing**: GHCR only (`ghcr.io/cjackhwang/ds2api`)
+- **Container publishing**: GHCR only (`ghcr.io/cjackhwang/tool-gateway`)
 
 | Platform | Architecture | Format |
 | --- | --- | --- |
@@ -76,7 +76,7 @@ Built-in GitHub Actions workflow: `.github/workflows/release-artifacts.yml`
 
 Each archive includes:
 
-- `ds2api` executable (`ds2api.exe` on Windows)
+- `tool-gateway` executable (`tool-gateway.exe` on Windows)
 - `static/admin/` (built WebUI assets)
 - `config.example.json`, `.env.example`
 - `README.MD`, `README.en.md`, `LICENSE`
@@ -86,15 +86,15 @@ Each archive includes:
 ```bash
 # 1. Download the archive for your platform
 # 2. Extract
-tar -xzf ds2api_<tag>_linux_amd64.tar.gz
-cd ds2api_<tag>_linux_amd64
+tar -xzf tool-gateway_<tag>_linux_amd64.tar.gz
+cd tool-gateway_<tag>_linux_amd64
 
 # 3. Configure
 cp config.example.json config.json
 # Edit config.json
 
 # 4. Start
-./ds2api
+./tool-gateway
 ```
 
 ### Maintainer Release Flow
@@ -111,7 +111,7 @@ cp config.example.json config.json
 
 ```bash
 # Pull prebuilt image
-docker pull ghcr.io/cjackhwang/ds2api:latest
+docker pull ghcr.io/cjackhwang/tool-gateway:latest
 
 # Copy env template and config file
 cp .env.example .env
@@ -129,15 +129,15 @@ docker-compose up -d
 docker-compose logs -f
 ```
 
-The default `docker-compose.yml` directly uses `ghcr.io/cjackhwang/ds2api:latest` and maps host port `6011` to container port `5001`. If you want `5001` exposed directly, set `TOOL_GATEWAY_HOST_PORT=5001` (or adjust the `ports` mapping).
+The default `docker-compose.yml` directly uses `ghcr.io/cjackhwang/tool-gateway:latest` and maps host port `6011` to container port `5001`. If you want `5001` exposed directly, set `TOOL_GATEWAY_HOST_PORT=5001` (or adjust the `ports` mapping).
 The compose template also defaults to `TOOL_GATEWAY_CONFIG_PATH=/data/config.json` with `./config.json:/data/config.json` mounted, so deployments avoid read-only `/app` persistence issues by default.
-The image pre-creates `/data` and grants it to the non-root `ds2api` user. If you bind-mount a single host file, make sure `config.json` is readable/writable by the container user, for example with `chmod 644 config.json`; otherwise Linux UID/GID mismatches can still cause `open /data/config.json: permission denied`.
+The image pre-creates `/data` and grants it to the non-root `tool-gateway` user. If you bind-mount a single host file, make sure `config.json` is readable/writable by the container user, for example with `chmod 644 config.json`; otherwise Linux UID/GID mismatches can still cause `open /data/config.json: permission denied`.
 Compatibility note: when `TOOL_GATEWAY_CONFIG_PATH` is unset and runtime base dir is `/app`, newer versions prefer `/data/config.json`; if that file is missing but legacy `/app/config.json` exists, Tool Gateway automatically falls back to the legacy path to avoid post-upgrade config loss.
 
 If you want a pinned version instead of `latest`, you can also pull a specific tag directly:
 
 ```bash
-docker pull ghcr.io/cjackhwang/ds2api:v3.0.0
+docker pull ghcr.io/cjackhwang/tool-gateway:v3.0.0
 ```
 
 ### 2.2 Update
@@ -155,7 +155,7 @@ The `Dockerfile` now provides two image paths:
 
 The release path keeps Docker images aligned with release archives and reduces duplicate build work.
 
-Container entry command: `/usr/local/bin/ds2api`, default exposed port: `5001`.
+Container entry command: `/usr/local/bin/tool-gateway`, default exposed port: `5001`.
 
 ### 2.4 Development Mode
 
@@ -371,12 +371,12 @@ Error: Command failed: go build -ldflags -s -w -o .../bootstrap ...
 #### Internal Package Import Error
 
 ```text
-use of internal package ds2api/internal/server not allowed
+use of internal package tool-gateway/internal/server not allowed
 ```
 
 **Cause**: Vercel Go entrypoint directly imports `internal/...`.
 
-**Fix**: This repo uses a public bridge package: `api/index.go` → `ds2api/app` → `internal/server`.
+**Fix**: This repo uses a public bridge package: `api/index.go` → `tool-gateway/app` → `internal/server`.
 
 #### Output Directory Error
 
@@ -423,8 +423,8 @@ TOOL_GATEWAY_CHAT_HISTORY_PATH=/tmp/chat_history.json
 
 ```bash
 # Clone
-git clone https://github.com/CJackHwang/ds2api.git
-cd ds2api
+git clone https://github.com/CJackHwang/tool-gateway.git
+cd tool-gateway
 
 # Copy and edit config
 cp config.example.json config.json
@@ -470,8 +470,8 @@ TOOL_GATEWAY_AUTO_BUILD_WEBUI=true go run ./cmd/tool-gateway
 ### 4.3 Compile to Binary
 
 ```bash
-go build -o ds2api ./cmd/tool-gateway
-./ds2api
+go build -o tool-gateway ./cmd/tool-gateway
+./tool-gateway
 ```
 
 ---
@@ -526,15 +526,15 @@ server {
 
 ```bash
 # Copy compiled binary and related files to target directory
-sudo mkdir -p /opt/ds2api
-sudo cp ds2api config.json /opt/ds2api/
-sudo cp -r static/admin /opt/ds2api/static/admin
+sudo mkdir -p /opt/tool-gateway
+sudo cp tool-gateway config.json /opt/tool-gateway/
+sudo cp -r static/admin /opt/tool-gateway/static/admin
 ```
 
 ### 6.2 Create systemd Service File
 
 ```ini
-# /etc/systemd/system/ds2api.service
+# /etc/systemd/system/tool-gateway.service
 
 [Unit]
 Description=Tool Gateway (Go)
@@ -542,11 +542,11 @@ After=network.target
 
 [Service]
 Type=simple
-WorkingDirectory=/opt/ds2api
+WorkingDirectory=/opt/tool-gateway
 Environment=PORT=5001
-Environment=TOOL_GATEWAY_CONFIG_PATH=/opt/ds2api/config.json
+Environment=TOOL_GATEWAY_CONFIG_PATH=/opt/tool-gateway/config.json
 Environment=TOOL_GATEWAY_ADMIN_KEY=your-admin-key-here
-ExecStart=/opt/ds2api/ds2api
+ExecStart=/opt/tool-gateway/tool-gateway
 Restart=always
 RestartSec=5
 
@@ -561,22 +561,22 @@ WantedBy=multi-user.target
 sudo systemctl daemon-reload
 
 # Enable on boot
-sudo systemctl enable ds2api
+sudo systemctl enable tool-gateway
 
 # Start
-sudo systemctl start ds2api
+sudo systemctl start tool-gateway
 
 # Check status
-sudo systemctl status ds2api
+sudo systemctl status tool-gateway
 
 # View logs
-sudo journalctl -u ds2api -f
+sudo journalctl -u tool-gateway -f
 
 # Restart
-sudo systemctl restart ds2api
+sudo systemctl restart tool-gateway
 
 # Stop
-sudo systemctl stop ds2api
+sudo systemctl stop tool-gateway
 ```
 
 ---

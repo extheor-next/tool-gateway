@@ -14,7 +14,7 @@ import (
 	"strings"
 	"time"
 
-	"ds2api/internal/config"
+	"tool-gateway/internal/config"
 )
 
 func (h *Handler) syncVercel(w http.ResponseWriter, r *http.Request) {

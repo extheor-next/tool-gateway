@@ -10,9 +10,9 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"ds2api/internal/account"
-	"ds2api/internal/config"
-	adminshared "ds2api/internal/httpapi/admin/shared"
+	"tool-gateway/internal/account"
+	"tool-gateway/internal/config"
+	adminshared "tool-gateway/internal/httpapi/admin/shared"
 )
 
 func newHTTPAdminHarness(t *testing.T, rawConfig string, ds adminshared.CompletionBackend) http.Handler {

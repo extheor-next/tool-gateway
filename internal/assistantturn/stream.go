@@ -1,8 +1,8 @@
 package assistantturn
 
 import (
-	"ds2api/internal/httpapi/openai/shared"
-	"ds2api/internal/sse"
+	"tool-gateway/internal/httpapi/openai/shared"
+	"tool-gateway/internal/sse"
 )
 
 type StreamEventType string

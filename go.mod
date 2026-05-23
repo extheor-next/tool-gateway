@@ -1,4 +1,4 @@
-module ds2api
+module tool-gateway
 
 go 1.26.0
 
