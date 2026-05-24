@@ -4,7 +4,7 @@
 
 # Tool Gateway
 
-<a href="https://trendshift.io/repositories/24508" target="_blank"><img src="https://trendshift.io/api/badge/repositories/24508" alt="CJackHwang%2Ftool-gateway | Trendshift" style="width: 250px; height: 55px;" width="250" height="55"/></a>
+<a href="https://trendshift.io/repositories/24508" target="_blank"><img src="https://trendshift.io/api/badge/repositories/24508" alt="extheor-next%2Ftool-gateway | Trendshift" style="width: 250px; height: 55px;" width="250" height="55"/></a>
 
 [![License](https://img.shields.io/github/license/extheor-next/tool-gateway.svg)](LICENSE)
 ![Stars](https://img.shields.io/github/stars/extheor-next/tool-gateway.svg)
@@ -16,7 +16,7 @@
 
 Language: [中文](README.MD) | [English](README.en.md)
 
-Tool Gateway is a generic gateway for AI model tool calling. It normalizes different upstream models and services behind OpenAI-, Claude-, and Gemini-compatible APIs, with shared tool-call parsing, streaming, authentication, account/pool management, WebUI administration, and deployment workflows. The core backend is Go-based, with a small Node Runtime bridge used for Vercel streaming, and the React WebUI admin panel lives in `webui/` (build output auto-generated to `static/admin` during deployment).
+Tool Gateway is a generic gateway for AI model tool calling. It normalizes different upstream AI providers (OpenAI, Claude, Gemini, etc.) behind standard protocol APIs, with shared tool-call parsing, streaming, authentication, multi-provider management, WebUI administration, and deployment workflows. The core backend is Go-based, with a small Node Runtime bridge used for Vercel streaming, and the React WebUI admin panel lives in `webui/` (build output auto-generated to `static/admin` during deployment).
 
 Documentation entry: [Docs Index](docs/README.md) / [Architecture](docs/ARCHITECTURE.en.md) / [API Reference](API.en.md)
 
@@ -24,9 +24,9 @@ Documentation entry: [Docs Index](docs/README.md) / [Architecture](docs/ARCHITEC
 
 <a href="https://www.star-history.com/?repos=extheor-next%2Ftool-gateway&type=date&legend=top-left">
  <picture>
-   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=cjackhwang/tool-gateway&type=date&theme=dark&legend=top-left" />
-   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=cjackhwang/tool-gateway&type=date&legend=top-left" />
-   <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=cjackhwang/tool-gateway&type=date&legend=top-left" />
+   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=extheor-next/tool-gateway&type=date&theme=dark&legend=top-left" />
+   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=extheor-next/tool-gateway&type=date&legend=top-left" />
+   <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=extheor-next/tool-gateway&type=date&legend=top-left" />
  </picture>
 </a>
 
@@ -213,10 +213,10 @@ cp config.example.json config.json
 
 ```bash
 # Pull prebuilt image
-docker pull ghcr.io/cjackhwang/tool-gateway:latest
+docker pull ghcr.io/extheor-next/tool-gateway:latest
 
 # Or run a pinned version
-# docker pull ghcr.io/cjackhwang/tool-gateway:v3.0.0
+# docker pull ghcr.io/extheor-next/tool-gateway:v3.0.0
 
 # Prepare env file and config file
 cp .env.example .env
@@ -226,7 +226,7 @@ cp config.example.json config.json
 docker-compose up -d
 ```
 
-The default `docker-compose.yml` uses `ghcr.io/cjackhwang/tool-gateway:latest` and maps host port `6011` to container port `5001`. If you want `5001` exposed directly, set `TOOL_GATEWAY_HOST_PORT=5001` (or adjust the `ports` mapping).
+The default `docker-compose.yml` uses `ghcr.io/extheor-next/tool-gateway:latest` and maps host port `6011` to container port `5001`. If you want `5001` exposed directly, set `TOOL_GATEWAY_HOST_PORT=5001` (or adjust the `ports` mapping).
 It also mounts `./config.json` to `/data/config.json` and sets `TOOL_GATEWAY_CONFIG_PATH=/data/config.json` by default, which avoids runtime token persistence failures caused by read-only `/app`.
 
 Rebuild after updates: `docker-compose up -d --build`
@@ -406,7 +406,7 @@ Workflow: `.github/workflows/release-artifacts.yml`
 
 - **Trigger**: by default only on GitHub Release `published`; you can also run it manually via `workflow_dispatch` and pass `release_tag` to rerun / backfill
 - **Outputs**: multi-platform binary archives (`linux/amd64`, `linux/arm64`, `linux/armv7`, `darwin/amd64`, `darwin/arm64`, `windows/amd64`, `windows/arm64`), Linux Docker image export tarballs, and `sha256sums.txt`
-- **Container publishing**: GHCR only (`ghcr.io/cjackhwang/tool-gateway`)
+- **Container publishing**: GHCR only (`ghcr.io/extheor-next/tool-gateway`)
 - **Each binary archive includes**: the `tool-gateway` executable, `static/admin`, `config.example.json`, `.env.example`, `README.MD`, `README.en.md`, and `LICENSE`
 
 ## Disclaimer

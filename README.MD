@@ -4,7 +4,7 @@
 
 # Tool Gateway
 
-<a href="https://trendshift.io/repositories/24508" target="_blank"><img src="https://trendshift.io/api/badge/repositories/24508" alt="CJackHwang%2Ftool-gateway | Trendshift" style="width: 250px; height: 55px;" width="250" height="55"/></a>
+<a href="https://trendshift.io/repositories/24508" target="_blank"><img src="https://trendshift.io/api/badge/repositories/24508" alt="extheor-next%2Ftool-gateway | Trendshift" style="width: 250px; height: 55px;" width="250" height="55"/></a>
 
 [![License](https://img.shields.io/github/license/extheor-next/tool-gateway.svg)](LICENSE)
 ![Stars](https://img.shields.io/github/stars/extheor-next/tool-gateway.svg)
@@ -17,7 +17,7 @@
 
 语言 / Language: [中文](README.MD) | [English](README.en.md)
 
-Tool Gateway 是一个面向 AI 大模型工具调用的通用网关项目：它把不同上游模型/服务统一封装成 OpenAI、Claude、Gemini 等常见协议，并提供工具调用解析、流式输出、鉴权、账号池、管理台和部署能力。核心后端以 **Go** 实现，Vercel 流式桥接额外使用少量 Node Runtime，前端为 React WebUI 管理台（源码在 `webui/`，部署时自动构建到 `static/admin`）。
+Tool Gateway 是一个面向 AI 大模型工具调用的通用网关项目：它把不同上游 AI 供应商（OpenAI、Claude、Gemini 等）统一封装成标准协议接口，并提供工具调用解析、流式输出、鉴权、多供应商管理、管理台和部署能力。核心后端以 **Go** 实现，Vercel 流式桥接额外使用少量 Node Runtime，前端为 React WebUI 管理台（源码在 `webui/`，部署时自动构建到 `static/admin`）。
 
 文档入口：[文档导航](docs/README.md) / [架构说明](docs/ARCHITECTURE.md) / [接口文档](API.md)
 
@@ -45,7 +45,6 @@ Tool Gateway 是一个面向 AI 大模型工具调用的通用网关项目：它
   - [方式四：本地源码运行](#方式四本地源码运行)
 - [配置说明](#配置说明)
 - [鉴权模式](#鉴权模式)
-- [并发模型](#并发模型)
 - [Tool Call 适配](#tool-call-适配)
 - [本地开发抓包工具](#本地开发抓包工具)
 - [文档索引](#文档索引)
@@ -76,10 +75,9 @@ flowchart LR
             Compat["PromptCompat\n(API -> 网页纯文本上下文)"]
             Completion["Completion Runtime\n(Session / PoW / Completion)"]
             Turn["AssistantTurn\n(输出语义归一)"]
-            Auth["Auth Resolver\n(API key / bearer / x-goog-api-key)"]
-            Pool["Account Pool + Queue\n(并发槽位 + 等待队列)"]
+            Auth["Auth Resolver\n(API Key 白名单 / Bearer / x-goog-api-key)"]
             UpstreamClient["Upstream Adapter\n(Auth / Completion / Files)"]
-            ProviderRuntime["Provider Runtime\n(Session / retry / optional PoW)"]
+            ProviderRuntime["Provider Runtime\n(多供应商路由 / 并发限流)"]
             Tool["Tool Sieve\n(Go/Node 语义对齐)"]
             History["Current Input File\n(TOOL_GATEWAY_HISTORY.txt)"]
         end
@@ -99,9 +97,8 @@ flowchart LR
     Vercel -.Go prepare.-> Completion
     Vercel -.Node SSE.-> Tool
     Completion --> Auth
-    Completion -.账号轮询.-> Pool
     Completion -.工具调用解析.-> Tool
-    Completion -.上游运行时.-> ProviderRuntime
+    Completion -.上游供应商路由.-> ProviderRuntime
     Auth --> UpstreamClient
     UpstreamClient --> Upstream
     Upstream --> UpstreamClient
@@ -124,11 +121,10 @@ flowchart LR
 | Gemini 兼容 | `POST /v1beta/models/{model}:generateContent`、`POST /v1beta/models/{model}:streamGenerateContent`（及 `/v1/models/{model}:*` 路径） |
 | Ollama 兼容 | `GET /api/version`、`GET /api/tags`、`POST /api/show` |
 | 统一 CORS 兼容 | `/v1/*`、`/anthropic/*`、`/v1beta/models/*`、`/api/*`、`/admin/*` 统一走同一套 CORS 策略；Vercel 上 `/v1/chat/completions` 的 Node Runtime 也对齐相同放行规则，尽量减少第三方预检请求头限制 |
-| 多账号/多凭据调度 | 托管上游凭据、自动选择可用账号、并发队列与重试策略 |
-| 并发队列控制 | 每账号 in-flight 上限 + 等待队列，动态计算建议并发值 |
-| 上游适配器 | 支持 OpenAI-compatible upstream，并保留可插拔的 Web Chat / 会话型上游适配能力 |
+| 多供应商管理 | 支持多个上游 AI 供应商（OpenAI / Claude / Gemini 等），可设置活跃供应商及每供应商并发限制 |
+| 上游适配器 | 支持 OpenAI-compatible upstream，自动探测供应商模式（Auto/OpenAI/Claude/Gemini） |
 | Tool Calling | 防泄漏处理：非代码块高置信特征识别、`delta.tool_calls` 早发、结构化增量输出 |
-| Admin API | 配置管理、运行时设置热更新、代理管理、账号测试 / 批量测试、会话清理、导入导出、Vercel 同步、版本检查 |
+| Admin API | 配置管理、运行时设置热更新、代理管理、导入导出、Vercel 同步、版本检查 |
 | WebUI 管理台 | `/admin` 单页应用（中英文双语、深色模式，支持查看服务器端对话记录） |
 | 运维探针 | `GET /healthz`（存活）、`GET /readyz`（就绪） |
 
@@ -263,7 +259,7 @@ cd tool-gateway
 
 # 2. 配置
 cp config.example.json config.json
-# 编辑 config.json，填入你的上游账号/密钥和客户端 API key
+# 编辑 config.json，填入上游供应商配置和客户端 API key
 
 # 3. 启动
 go run ./cmd/tool-gateway
@@ -282,9 +278,10 @@ go run ./cmd/tool-gateway
 常用字段：
 
 - `keys` / `api_keys`：客户端访问密钥，`api_keys` 支持 `name` 与 `remark` 元信息，`keys` 继续兼容。
-- `accounts`：托管上游账号/凭据，可配置代理、名称和备注。
+- `external_ai`：单个上游 AI 供应商配置（base_url、api_key、model、mode）。
+- `external_ai_providers`：多供应商配置，支持 active 选择和 per-provider 并发限制。
 - `model_aliases`：OpenAI / Claude / Gemini 共用的模型 alias 映射。
-- `runtime`：账号并发、队列与 token 刷新策略，可通过 Admin Settings 热更新。
+- `runtime`：全局并发上限，可通过 Admin Settings 热更新。
 - `auto_delete.mode`：请求结束后的远端会话清理策略，支持 `none` / `single` / `all`。
 - `current_input_file`：全局生效的上下文拆分上传策略；默认开启且阈值为 `0`，触发时将完整上下文合并上传为 `TOOL_GATEWAY_HISTORY.txt` 上下文文件。
 - 如果关闭 `current_input_file`，请求会直接透传，不上传拆分上下文文件。
@@ -294,31 +291,18 @@ go run ./cmd/tool-gateway
 
 ## 鉴权模式
 
-调用业务接口（`/v1/*`、`/anthropic/*`、Gemini 路由）时支持两种模式：
+调用业务接口（`/v1/*`、`/anthropic/*`、Gemini 路由）时，通过 `Bearer` 或 `x-api-key` 传入 `config.keys` 中的 key 进行认证。不在白名单中的 key 返回 `401 invalid api key`。
 
-| 模式 | 说明 |
-| --- | --- |
-| **托管账号模式** | `Bearer` 或 `x-api-key` 传入 `config.keys` 中的 key，由服务自动轮询选择账号 |
-| **拒绝未授权 key** | 传入 token 不在 `config.keys` 中时，返回 `401 invalid api key` |
-
-可选请求头 `X-Tool-Gateway-Target-Account`：指定使用某个托管账号（值为 email 或 mobile）。
-如果指定账号不存在，或者当前管理账号队列已满，请求会返回 `429`；当前 `429` 不附带 `Retry-After` 头。若账号存在但登录/刷新失败，则返回对应的鉴权错误。
-未指定目标账号时，如果 completion 因上游 thinking-only 空输出在同账号补偿重试后仍将返回 `429 upstream_empty_output`，托管账号模式会自动切到下一个可用账号，新建 session，并用原始 payload 再 fresh retry 一次。
 Gemini 路由还可以使用 `x-goog-api-key`，或在没有认证头时使用 `?key=` / `?api_key=` 作为调用方凭据。
 
 ## 并发模型
 
-```
-每账号可用并发 = TOOL_GATEWAY_ACCOUNT_MAX_INFLIGHT（默认 2）
-建议并发值 = 账号数量 × 每账号并发上限
-等待队列上限 = TOOL_GATEWAY_ACCOUNT_MAX_QUEUE（默认 = 建议并发值）
-429 阈值 = in-flight + 等待队列 ≈ 账号数量 × 4
-```
+网关支持两级并发控制：
 
-- 当 in-flight 槽位满时，请求进入等待队列，**不会立即 429**
-- 超出总承载上限后才返回 `429 Too Many Requests`，当前响应不附带 `Retry-After`
-- completion 空输出类 429 会先做同账号补偿重试；托管账号模式还会在最终返回 429 前切到另一个可用账号 fresh retry 一次
-- `GET /admin/queue/status` 返回实时并发状态
+- **供应商级**：每个供应商可独立配置 `max_inflight`（并发上限）和 `max_queue`（等待队列上限），0 表示不限制
+- **全局级**：`runtime.global_max_inflight` 控制网关整体并发上限
+
+单供应商并发满时进入等待队列，全部满载后返回 `429 Too Many Requests`。
 
 ## Tool Call 适配
 
@@ -395,7 +379,7 @@ go run ./cmd/tool-gateway
 
 - **触发条件**：默认仅在 GitHub Release `published` 时自动触发；也支持在 Actions 页面手动 `workflow_dispatch`，并填写 `release_tag` 复跑/补发
 - **构建产物**：多平台二进制包（`linux/amd64`、`linux/arm64`、`linux/armv7`、`darwin/amd64`、`darwin/arm64`、`windows/amd64`、`windows/arm64`）、Linux Docker 镜像导出包 + `sha256sums.txt`
-- **容器镜像发布**：仅推送到 GHCR（`ghcr.io/cjackhwang/tool-gateway`）
+- **容器镜像发布**：仅推送到 GHCR（`ghcr.io/extheor-next/tool-gateway`）
 - **每个二进制压缩包包含**：`tool-gateway` 可执行文件、`static/admin`、`config.example.json`、`.env.example`、`README.MD`、`README.en.md`、`LICENSE`
 
 ## 免责声明
@@ -409,8 +393,8 @@ go run ./cmd/tool-gateway
 
 <a href="https://www.star-history.com/?repos=extheor-next%2Ftool-gateway&type=date&legend=top-left">
  <picture>
-   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=cjackhwang/tool-gateway&type=date&theme=dark&legend=top-left" />
-   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=cjackhwang/tool-gateway&type=date&legend=top-left" />
-   <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=cjackhwang/tool-gateway&type=date&legend=top-left" />
+   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=extheor-next/tool-gateway&type=date&theme=dark&legend=top-left" />
+   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=extheor-next/tool-gateway&type=date&legend=top-left" />
+   <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=extheor-next/tool-gateway&type=date&legend=top-left" />
  </picture>
 </a>
