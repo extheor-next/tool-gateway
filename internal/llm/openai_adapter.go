@@ -64,7 +64,11 @@ func (a *OpenAIAdapter) UploadFileToProvider(ctx context.Context, filename strin
 	if strings.TrimSpace(cfg.APIKey) == "" {
 		return "", errors.New("external_ai api_key is required")
 	}
-	url := strings.TrimSuffix(cfg.BaseURL, "/") + "/v1/files"
+	base := strings.TrimSuffix(cfg.BaseURL, "/")
+	if strings.HasSuffix(base, "/v1") {
+		base = strings.TrimSuffix(base, "/v1")
+	}
+	url := base + "/v1/files"
 	body := &bytes.Buffer{}
 	writer := multipart.NewWriter(body)
 	_ = writer.WriteField("purpose", "assistants")

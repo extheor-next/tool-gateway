@@ -265,8 +265,17 @@ func (s Service) applyTruncationForExternalProvider(stdReq promptcompat.Standard
 	totalChars := 0
 	for _, m := range stdReq.Messages {
 		if msg, ok := m.(map[string]any); ok {
-			if content, _ := msg["content"].(string); content != "" {
-				totalChars += len([]rune(content))
+			switch c := msg["content"].(type) {
+			case string:
+				totalChars += len([]rune(c))
+			case []any:
+				for _, part := range c {
+					if p, ok := part.(map[string]any); ok {
+						if t, _ := p["text"].(string); t != "" {
+							totalChars += len([]rune(t))
+						}
+					}
+				}
 			}
 		}
 	}
@@ -274,33 +283,7 @@ func (s Service) applyTruncationForExternalProvider(stdReq promptcompat.Standard
 		return stdReq, nil
 	}
 
-	fileText := promptcompat.BuildOpenAICurrentInputContextTranscript(stdReq.Messages)
-	if strings.TrimSpace(fileText) == "" {
-		return stdReq, nil
-	}
-
-	// Try file upload if provider supports it
-	if uploader, ok := s.Backend.(fileUploader); ok {
-		reqCopy := stdReq
-		fileID, err := uploader.UploadFileToProvider(context.Background(), currentInputFilename, []byte(fileText))
-		if err == nil && fileID != "" {
-			messages := []any{
-				map[string]any{
-					"role":    "user",
-					"content": currentInputFilePrompt(false),
-				},
-			}
-			reqCopy.Messages = messages
-			reqCopy.HistoryText = fileText
-			reqCopy.CurrentInputFileApplied = true
-			reqCopy.CurrentInputFileID = fileID
-			reqCopy.FinalPrompt, reqCopy.ToolNames = promptcompat.BuildOpenAIPromptWithToolInstructionsOnly(messages, reqCopy.ToolsRaw, "", reqCopy.ToolChoice, reqCopy.Thinking)
-			reqCopy.PromptTokenText = strings.Join([]string{fileText, reqCopy.FinalPrompt}, "\n")
-			return reqCopy, nil
-		}
-	}
-
-	// Fallback: truncate messages
+	// External providers: truncate messages in place (no file upload needed)
 	maxKeep := s.Store.CurrentInputFileMaxKeepMessages()
 	keep := make([]any, 0)
 	i := 0

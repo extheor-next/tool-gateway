@@ -29,6 +29,10 @@ type fileFetcher interface {
 	FetchUploadedFile(ctx context.Context, fileID string) (*dsclient.UploadFileResult, error)
 }
 
+type externalFileUploader interface {
+	UploadFileToProvider(ctx context.Context, filename string, content []byte) (string, error)
+}
+
 func (h *Handler) UploadFile(w http.ResponseWriter, r *http.Request) {
 	_, err := h.Auth.Determine(r)
 	if err != nil {
@@ -67,6 +71,25 @@ func (h *Handler) UploadFile(w http.ResponseWriter, r *http.Request) {
 	if contentType == "" && len(data) > 0 {
 		contentType = http.DetectContentType(data)
 	}
+	// If backend supports external file upload, proxy to provider
+	if ext, ok := h.Backend.(externalFileUploader); ok {
+		fileID, err := ext.UploadFileToProvider(r.Context(), header.Filename, data)
+		if err != nil {
+			shared.WriteOpenAIError(w, http.StatusInternalServerError, "Failed to upload file: "+err.Error())
+			return
+		}
+		shared.WriteJSON(w, http.StatusOK, map[string]any{
+			"id":         fileID,
+			"object":     "file",
+			"bytes":      len(data),
+			"created_at": 0,
+			"filename":   header.Filename,
+			"purpose":    strings.TrimSpace(r.FormValue("purpose")),
+			"status":     "uploaded",
+		})
+		return
+	}
+
 	modelType := resolveUploadModelType(h.Store, r)
 	result, err := h.Backend.UploadFile(r.Context(), dsclient.UploadFileRequest{
 		Filename:    header.Filename,
