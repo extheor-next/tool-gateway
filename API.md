@@ -32,17 +32,13 @@
 | Base URL | `http://localhost:5001` 或你的部署域名 |
 | 默认 Content-Type | `application/json` |
 | 健康检查 | `GET /healthz`、`GET /readyz` |
-| CORS | 已启用（统一覆盖 `/v1/*`、`/anthropic/*`、`/v1beta/models/*`、`/api/*`、`/admin/*`；浏览器有 `Origin` 时回显该 Origin，否则为 `*`；默认允许 `Content-Type`, `Authorization`, `X-API-Key`, `X-Tool-Gateway-Target-Account`, `X-Tool-Gateway-Source`, `X-Vercel-Protection-Bypass`, `X-Goog-Api-Key`, `Anthropic-Version`, `Anthropic-Beta`，并会放行预检里声明的第三方请求头，如 `x-stainless-*`；Vercel 上 `/v1/chat/completions` 的 Node Runtime 也对齐相同行为；内部专用头 `X-Tool-Gateway-Internal-Token` 仍被拦截） |
-
-- 所有 JSON 请求体都必须是合法 UTF-8；非法字节序列会在入站阶段被拒绝为 `400 invalid json`。
-
 ### 3.0 接口适配层说明
 
 - OpenAI / Claude / Gemini 三套协议已统一挂在同一 `chi` 路由树上，由 `internal/server/router.go` 负责装配。
 - 适配器层职责收敛为：**请求归一化 → 上游调用 → 协议形态渲染**，减少历史版本中“同能力多处实现”的分叉。
 - Tool Calling 的解析策略在 Go 与 Node Runtime 间保持一致：推荐模型输出半角管道符 DSML 外壳 `<|DSML|tool_calls>` → `<|DSML|invoke name="...">` → `<|DSML|parameter name="...">`；兼容层也接受 DSML wrapper 别名 `<dsml|tool_calls>`、`<|tool_calls>`、常见 DSML 分隔符漏写形态（如 `<|DSML tool_calls>`）、`DSML` 与工具标签名黏连的常见 typo（如 `<DSMLtool_calls>`）、控制分隔符漂移（如 `<DSML␂tool_calls>` / 原始 STX `\x02`）、CJK 尖括号、全角感叹号、顿号、PascalCase 本地名、弯引号属性值与属性尾部分隔符漂移（如 `<DSM|parameter name="command"|>...〈/DSM|parameter〉` / `<！DSML！invoke name=“Bash”>` / `<、DSML、tool_calls>` / `<DSmartToolCalls>` / `<DSMLtool_calls※>`）、任意协议前缀壳（如 `<proto💥tool_calls>`），以及旧式 canonical XML `<tool_calls>` → `<invoke name="...">` → `<parameter name="...">`。实现上采用结构扫描：只要固定本地标签名是 `tool_calls` / `invoke` / `parameter`，标签名前或标签名后的非结构性分隔符会在解析入口归一化；CDATA 开头也会容错 `<！[CDATA[` / `<、[CDATA[` 这类分隔符漂移；只有 `tool_calls` wrapper 或可修复的缺失 opening wrapper 会进入工具路径，裸 `<invoke>` 不计为已支持语法；流式场景继续执行防泄漏筛分。若参数体本身是合法 JSON 字面量（如 `123`、`true`、`null`、数组或对象），会按结构化值输出，不再一律当作字符串；显式空字符串和纯空白参数会结构化保留为空字符串，是否拒绝缺参由工具执行侧决定；完整但 malformed 的 wrapper 会作为普通文本释放，不会吞掉或伪造成工具调用；若 CDATA 偶发漏闭合，则会在最终 parse / flush 恢复阶段做窄修复，尽量保住已完整包裹的外层工具调用。
 - `Admin API` 将配置与运行时策略分开：`/admin/config*` 管静态配置，`/admin/settings*` 管运行时行为。
-- 当上游返回 thinking-only 响应（模型输出了推理链但无可见文本）时，Go 主路径与 Vercel Node 流式路径都会先自动重试一次：以多轮对话 follow-up 方式追加 prompt 后缀 `"Previous reply had no visible output. Please regenerate the visible final answer or tool call now."` 并设置 `parent_message_id` 在同一 upstream session 内让模型重新输出；同账号重试最大 1 次。若同账号重试后仍即将返回 `429 upstream_empty_output`，托管账号模式会在返回 429 前自动切换到下一个可用账号，新建 session，用原始 payload 再 fresh retry 一次。
+- 当上游返回 thinking-only 响应（模型输出了推理链但无可见文本）时，Go 主路径与 Vercel Node 流式路径都会先自动重试一次：以多轮对话 follow-up 方式追加 prompt 后缀 `"Previous reply had no visible output. Please regenerate the visible final answer or tool call now."` 并设置 `parent_message_id` 在同一 upstream session 内让模型重新输出；同账号重试最大 1 次。若同账号重试后仍即将返回 `429 upstream_empty_output`，网关会在返回 429 前自动重试一次。
 - 引用标记处理边界：流式输出默认隐藏 `[citation:N]` / `[reference:N]` 这类上游内部占位符；非流式输出默认把 上游搜索引用标记转换为 Markdown 引用链接。
 
 ---
@@ -80,16 +76,10 @@ Vercel 一键部署可先只填 `TOOL_GATEWAY_ADMIN_KEY`，部署后在 `/admin`
 | Bearer Token | `Authorization: Bearer <token>` |
 | API Key Header | `x-api-key: <token>`（无 `Bearer` 前缀） |
 | Gemini 兼容 | `x-goog-api-key: <token>` 或 `?key=<token>` / `?api_key=<token>` |
-
 **鉴权行为**：
 
-- token 在 `config.keys` 中 → **托管账号模式**，Tool Gateway 自动轮询选择账号
+- token 在 `config.keys` 中 → **网关密钥模式**，Tool Gateway 验证密钥并将请求透传至上游供应商
 - token 不在 `config.keys` 中 → 请求会被拒绝为 `401 invalid api key`
-
-**可选请求头**：`X-Tool-Gateway-Target-Account: <email_or_mobile>` — 指定使用某个托管账号；如果目标账号不存在，或管理账号队列已耗尽，相关业务请求会返回 `429`，当前不会附带 `Retry-After` 头。若账号存在但登录/刷新失败，则返回对应的 `401` 或上游错误。未指定目标账号时，托管账号模式的 completion 空输出 429 会先尝试切到另一个可用账号 fresh retry 一次；指定目标账号或无其他可用账号时不会切号。
-Gemini 兼容客户端还可以使用 `x-goog-api-key`、`?key=` 或 `?api_key=` 作为凭据来源。
-
-### Admin 接口（`/admin/*`）
 
 | 端点 | 鉴权 |
 | --- | --- |
@@ -147,16 +137,8 @@ Gemini 兼容客户端还可以使用 `x-goog-api-key`、`?key=` 或 `?api_key=`
 | PUT | `/admin/proxies/{proxyID}` | Admin | 更新代理（留空 password 表示保留原密码） |
 | DELETE | `/admin/proxies/{proxyID}` | Admin | 删除代理（自动解绑引用该代理的账号） |
 | POST | `/admin/proxies/test` | Admin | 测试代理连通性 |
-| GET | `/admin/accounts` | Admin | 分页账号列表 |
-| POST | `/admin/accounts` | Admin | 添加账号 |
-| PUT | `/admin/accounts/{identifier}` | Admin | 更新账号 name/remark |
-| DELETE | `/admin/accounts/{identifier}` | Admin | 删除账号 |
-| PUT | `/admin/accounts/{identifier}/proxy` | Admin | 为账号绑定/解绑代理 |
-| GET | `/admin/queue/status` | Admin | 账号队列状态 |
-| POST | `/admin/accounts/test` | Admin | 测试单个账号 |
-| POST | `/admin/accounts/test-all` | Admin | 测试全部账号 |
-| POST | `/admin/accounts/sessions/delete-all` | Admin | 删除某账号的全部会话 |
-| POST | `/admin/import` | Admin | 批量导入 keys/accounts |
+
+| POST | `/admin/import` | Admin | 批量导入配置 |
 | POST | `/admin/test` | Admin | 测试当前 API 可用性 |
 | POST | `/admin/dev/raw-samples/capture` | Admin | 直接发起一次请求并保存为 raw sample |
 | GET | `/admin/dev/raw-samples/query` | Admin | 按问题关键词查询当前内存抓包链 |
@@ -201,7 +183,6 @@ OpenAI `/v1/*` 仍是规范路径。对于只配置 Tool Gateway 根地址的客
 ### `GET /v1/models`
 
 无需鉴权。返回当前支持的 上游模型列表。
-
 **响应示例**：
 
 ```json
@@ -249,14 +230,12 @@ OpenAI `/v1/*` 仍是规范路径。对于只配置 Tool Gateway 根地址的客
 ### `POST /v1/chat/completions`
 
 > 路径说明：除规范路径 `/v1/chat/completions` 外，也支持根路径快捷别名 `/chat/completions`。在 Vercel Runtime 上，`vercel.json` 仅把规范路径 `/v1/chat/completions` 重写到 Node 流式桥接；根路径快捷别名仍走 Go 主链路。因此 Vercel 上需要实时流式时请使用 `/v1/chat/completions`。
-
 **请求头**：
 
 ```http
 Authorization: Bearer your-api-key
 Content-Type: application/json
 ```
-
 **请求体**：
 
 | 字段 | 类型 | 必填 | 说明 |
@@ -312,7 +291,6 @@ data: {"id":"...","object":"chat.completion.chunk","choices":[{"delta":{},"index
 
 data: [DONE]
 ```
-
 **字段说明**：
 
 - 首个 delta 包含 `role: assistant`
@@ -324,7 +302,6 @@ data: [DONE]
 #### Tool Calls
 
 当请求中含 `tools` 时，Tool Gateway 做防泄漏处理：
-
 **非流式**：识别到工具调用时，返回 `message.tool_calls`，设置 `finish_reason=tool_calls`，`message.content=null`。
 
 ```json
@@ -351,7 +328,6 @@ data: [DONE]
   ]
 }
 ```
-
 **流式**：命中高置信特征后立即输出 `delta.tool_calls`（不等待完整工具参数闭合），并持续发送 arguments 增量；已确认的工具调用片段不会回流到 `delta.content`。
 
 补充说明：
@@ -381,10 +357,8 @@ OpenAI Responses 风格接口，兼容 `input` 或 `messages`。
 | `stream` | boolean | ❌ | 默认 `false` |
 | `tools` | array | ❌ | 与 chat 同样的工具识别与转译策略（含代码块示例豁免） |
 | `tool_choice` | string/object | ❌ | 支持 `auto`/`none`/`required` 与强制函数（`{"type":"function","name":"..."}`） |
-
 **非流式响应**：返回标准 `response` 对象，`id` 形如 `resp_xxx`，并写入内存 TTL 存储。
 当 `tool_choice=required` 且未产出有效工具调用时，返回 HTTP `422`（`error.code=tool_choice_violation`）。
-
 **流式响应（SSE）**：最小事件序列如下。
 
 ```text
@@ -468,7 +442,6 @@ data: [DONE]
 ### `GET /anthropic/v1/models`
 
 无需鉴权。
-
 **响应示例**：
 
 ```json
@@ -491,7 +464,6 @@ data: [DONE]
 > 说明：示例仅展示部分模型；实际返回除当前主别名外，还包含 Claude 4.x snapshots、3.x 历史模型 ID 与常见别名，并为这些可映射模型额外提供 `-nothinking` 变体。
 
 ### `POST /anthropic/v1/messages`
-
 **请求头**：
 
 ```http
@@ -501,7 +473,6 @@ anthropic-version: 2023-06-01
 ```
 
 > `anthropic-version` 可省略，服务端会自动补为 `2023-06-01`。
-
 **请求体**：
 
 | 字段 | 类型 | 必填 | 说明 |
@@ -568,7 +539,6 @@ data: {"type":"message_delta","delta":{"stop_reason":"end_turn","stop_sequence":
 event: message_stop
 data: {"type":"message_stop"}
 ```
-
 **说明**：
 
 - 默认支持 thinking 的模型会输出 `thinking` block / `thinking_delta`；请求显式关闭 thinking 或使用 `-nothinking` 模型时不会输出
@@ -577,7 +547,6 @@ data: {"type":"message_stop"}
 - `tools` 场景优先避免泄露原始工具 JSON，不强制发送 `input_json_delta`
 
 ### `POST /anthropic/v1/messages/count_tokens`
-
 **请求**：
 
 ```json
@@ -588,7 +557,6 @@ data: {"type":"message_stop"}
   ]
 }
 ```
-
 **响应**：
 
 ```json
@@ -653,7 +621,6 @@ data: {"type":"message_stop"}
 ### `POST /admin/login`
 
 无需鉴权。
-
 **请求**：
 
 ```json
@@ -664,7 +631,6 @@ data: {"type":"message_stop"}
 ```
 
 `expire_hours` 可省略，默认 `24`。
-
 **响应**：
 
 ```json
@@ -678,7 +644,6 @@ data: {"type":"message_stop"}
 ### `GET /admin/verify`
 
 需要 JWT：`Authorization: Bearer <jwt>`
-
 **响应**：
 
 ```json
@@ -724,17 +689,7 @@ data: {"type":"message_stop"}
     "project_id": "prj_xxx",
     "team_id": ""
   },
-  "accounts": [
-    {
-      "identifier": "user@example.com",
-      "email": "user@example.com",
-      "mobile": "",
-      "has_password": true,
-      "has_token": true,
-      "token_preview": "abcde..."
-    }
-  ],
-  "model_aliases": {
+    "model_aliases": {
     "claude-sonnet-4-6": "deepseek-v4-flash",
     "claude-opus-4-6": "deepseek-v4-pro"
   }
@@ -743,9 +698,8 @@ data: {"type":"message_stop"}
 
 ### `POST /admin/config`
 
-只更新 `keys`、`api_keys`、`accounts`、`model_aliases`。
+只更新 `keys`、`api_keys`、`model_aliases`。
 如果同时发送 `api_keys` 与 `keys`，优先保留 `api_keys` 中的结构化 `name` / `remark`；`keys` 仅作为旧格式兼容回退。
-
 **请求**：
 
 ```json
@@ -755,10 +709,7 @@ data: {"type":"message_stop"}
     {"key": "k1", "name": "主 Key", "remark": "生产流量"},
     {"key": "k2", "name": "备用 Key", "remark": "压测"}
   ],
-  "accounts": [
-    {"email": "user@example.com", "password": "pwd", "token": ""}
-  ],
-  "model_aliases": {
+    "model_aliases": {
     "claude-sonnet-4-6": "deepseek-v4-flash",
     "claude-opus-4-6": "deepseek-v4-pro"
   }
@@ -771,10 +722,10 @@ data: {"type":"message_stop"}
 
 - `success`
 - `admin`（`has_password_hash`、`jwt_expire_hours`、`jwt_valid_after_unix`、`default_password_warning`）
-- `runtime`（`account_max_inflight`、`account_max_queue`、`global_max_inflight`、`token_refresh_interval_hours`）
+- `runtime`（`global_max_inflight`）
 - `responses` / `embeddings`
 - `auto_delete`（`mode`：`none` / `single` / `all`；旧配置 `sessions=true` 仍按 `all` 处理）
-- `current_input_file`（`enabled` 默认返回 `true`、`min_chars`）
+- `current_input_file`（`enabled`、`min_chars`、`max_keep_messages`）
 - `thinking_injection`（`enabled` 默认返回 `true`、`prompt`、`default_prompt`）
 - `model_aliases`
 - `env_backed`、`needs_vercel_sync`
@@ -785,7 +736,6 @@ data: {"type":"message_stop"}
 热更新运行时设置。支持更新：
 
 - `admin.jwt_expire_hours`
-- `runtime.account_max_inflight` / `runtime.account_max_queue` / `runtime.global_max_inflight` / `runtime.token_refresh_interval_hours`
 - `responses.store_ttl_seconds`
 - `embeddings.provider`
 - `auto_delete.mode`
@@ -825,7 +775,6 @@ data: {"type":"message_stop"}
 
 响应示例：
 
-
 > 注：`_vercel_sync_hash` 和 `_vercel_sync_time` 为内部同步元数据字段，用于 Vercel 配置漂移检测。
 
 ### `POST /admin/keys`
@@ -833,7 +782,6 @@ data: {"type":"message_stop"}
 ```json
 {"key": "new-api-key", "name": "主 Key", "remark": "生产流量"}
 ```
-
 **响应**：`{"success": true, "total_keys": 3}`
 
 ### `PUT /admin/keys/{key}`
@@ -843,11 +791,9 @@ data: {"type":"message_stop"}
 ```json
 {"name": "备用 Key", "remark": "压测"}
 ```
-
 **响应**：`{"success": true, "total_keys": 3}`
 
 ### `DELETE /admin/keys/{key}`
-
 **响应**：`{"success": true, "total_keys": 2}`
 
 ### `GET /admin/proxies`
@@ -870,181 +816,23 @@ data: {"type":"message_stop"}
 
 测试代理连通性：传 `proxy_id` 时测试已保存代理；不传时按请求体代理字段做临时连通性测试。
 
-### `GET /admin/accounts`
-
-**查询参数**：
-
-| 参数 | 默认 | 范围 |
-| --- | --- | --- |
-| `page` | `1` | ≥ 1 |
-| `page_size` | `10` | 1–5000 |
-| `q` | 空 | 按 identifier / email / mobile 过滤 |
-
-**响应**：
-
-```json
-{
-  "items": [
-    {
-      "identifier": "user@example.com",
-      "email": "user@example.com",
-      "mobile": "",
-      "has_password": true,
-      "has_token": true,
-      "token_preview": "abc...",
-      "test_status": "ok"
-    }
-  ],
-  "total": 25,
-  "page": 1,
-  "page_size": 10,
-  "total_pages": 3
-}
-```
-
-### `POST /admin/accounts`
-
-```json
-{"email": "user@example.com", "password": "pwd"}
-```
-
-**响应**：`{"success": true, "total_accounts": 6}`
-
-### `PUT /admin/accounts/{identifier}`
-
-更新指定账号的 `name` / `remark`。路径参数中的 `identifier` 可以是 email 或 mobile，且不可修改。
-
-```json
-{"name": "主账号", "remark": "团队共享"}
-```
-
-**响应**：`{"success": true, "total_accounts": 6}`
-
-### `DELETE /admin/accounts/{identifier}`
-
-`identifier` 可为 email、mobile，或 token-only 账号的合成标识（`token:<hash>`）。
-
-**响应**：`{"success": true, "total_accounts": 5}`
-
-### `PUT /admin/accounts/{identifier}/proxy`
-
-更新指定账号绑定代理。
-
-- 请求体：`{"proxy_id":"..."}`；
-- `proxy_id` 传空字符串时表示解绑代理；
-- `identifier` 支持 email / mobile / token-only 合成标识。
-
-### `GET /admin/queue/status`
-
-```json
-{
-  "available": 3,
-  "in_use": 1,
-  "total": 4,
-  "available_accounts": ["a@example.com"],
-  "in_use_accounts": ["b@example.com"],
-  "max_inflight_per_account": 2,
-  "global_max_inflight": 8,
-  "recommended_concurrency": 8,
-  "waiting": 0,
-  "max_queue_size": 8
-}
-```
-
-| 字段 | 说明 |
-| --- | --- |
-| `available` | 仍有剩余并发槽位的账号数 |
-| `in_use` | 当前已占用的 in-flight 槽位数 |
-| `total` | 总账号数 |
-| `available_accounts` | 仍有剩余并发槽位的账号 ID 列表 |
-| `in_use_accounts` | 当前处于使用中的账号 ID 列表 |
-| `max_inflight_per_account` | 每账号并发上限 |
-| `global_max_inflight` | 全局并发上限 |
-| `recommended_concurrency` | 建议并发值（`total × max_inflight_per_account`） |
-| `waiting` | 当前等待中的请求数 |
-| `max_queue_size` | 等待队列上限 |
-
-### `POST /admin/accounts/test`
-
-| 字段 | 必填 | 说明 |
-| --- | --- | --- |
-| `identifier` | ✅ | email / mobile / token-only 合成标识 |
-| `model` | ❌ | 默认 `deepseek-v4-flash` |
-| `message` | ❌ | 空字符串时仅测试会话创建 |
-
-**响应**：
-
-```json
-{
-  "account": "user@example.com",
-  "success": true,
-  "response_time": 1240,
-  "message": "API 测试成功（仅会话创建）",
-  "model": "deepseek-v4-flash",
-  "session_count": 0,
-  "config_writable": true,
-  "config_warning": ""
-}
-```
-
-如果传入 `message`，还会附带 `thinking`（当上游返回思考内容时）。
-
-当部署环境配置文件路径不可写（例如容器内默认 `/app/config.json` 只读）时，登录与会话测试仍可继续；此时会返回 `config_warning` 提示 token 仅保存在内存、重启后丢失。
-
-### `POST /admin/accounts/test-all`
-
-可选请求字段：`model`
-
-```json
-{
-  "total": 5,
-  "success": 4,
-  "failed": 1,
-  "results": [...]
-}
-```
-
-内部并发上限当前固定为 5。
-
-### `POST /admin/accounts/sessions/delete-all`
-
-清空指定账号的所有 上游会话。请求体示例：
-
-```json
-{"identifier":"user@example.com"}
-```
-
-响应：
-
-```json
-{"success": true, "message": "删除成功"}
-```
-
-如果账号不存在或删除失败，`success` 会是 `false`，`message` 会返回错误原因。
-
 ### `POST /admin/import`
 
 批量导入 keys 与 accounts。
-
 **请求**：
 
 ```json
 {
-  "keys": ["k1", "k2"],
-  "accounts": [
-    {"email": "user@example.com", "password": "pwd", "token": ""}
-  ]
-}
+  "keys": ["k1", "k2"]
+  }
 ```
-
 **响应**：
 
 ```json
 {
   "success": true,
   "imported_keys": 2,
-  "imported_accounts": 1
-}
+  }
 ```
 
 ### `POST /admin/test`
@@ -1056,7 +844,6 @@ data: {"type":"message_stop"}
 | `model` | ❌ | `deepseek-v4-flash` |
 | `message` | ❌ | `你好` |
 | `api_key` | ❌ | 配置中第一个 key |
-
 **响应**：
 
 ```json
@@ -1098,14 +885,12 @@ data: {"type":"message_stop"}
 ### `GET /admin/dev/raw-samples/query`
 
 按关键词查询当前进程内存里的抓包记录，并按 `chat_session_id` 归并 `completion + continue` 链。
-
 **查询参数**：
 
 | 参数 | 默认值 | 说明 |
 | --- | --- | --- |
 | `q` | 空 | 按请求体/响应体关键词模糊匹配 |
 | `limit` | `20` | 返回链条数上限 |
-
 **响应字段**包含：
 
 - `items[].chain_key`
@@ -1144,13 +929,11 @@ data: {"type":"message_stop"}
 | `team_id` | ❌ | 空则读 `VERCEL_TEAM_ID`，再回退到已保存配置 |
 | `auto_validate` | ❌ | 默认 `true` |
 | `save_credentials` | ❌ | 默认 `true`；保存本次显式填写的 Vercel 凭据，供下次同步复用 |
-
 **成功响应**：
 
 ```json
 {
   "success": true,
-  "validated_accounts": 3,
   "message": "配置已同步，正在重新部署...",
   "deployment_url": "https://..."
 }
@@ -1161,7 +944,6 @@ data: {"type":"message_stop"}
 ```json
 {
   "success": true,
-  "validated_accounts": 3,
   "message": "配置已同步到 Vercel，请手动触发重新部署",
   "manual_deploy_required": true
 }
@@ -1267,13 +1049,12 @@ Gemini 路由使用 Google 风格错误结构：
 ```
 
 建议客户端处理逻辑：检查 HTTP 状态码 + 解析 `error` 或 `detail` 字段。
-
 **常见状态码**：
 
 | 状态码 | 说明 |
 | --- | --- |
 | `401` | 鉴权失败（key/token 无效，或 Admin JWT 过期） |
-| `429` | 请求过多（超出并发上限 + 等待队列，或上游账号 thinking-only 后仍无可见输出；托管账号模式会先尝试一次切号 fresh retry；当前不附带 `Retry-After` 头） |
+| `429` | 请求过多（超出全局或供应商并发限制）。 |
 | `503` | 模型不可用或上游服务异常 |
 
 ---
@@ -1441,15 +1222,3 @@ curl http://localhost:5001/admin/login \
   -d '{"admin_key": "admin"}'
 ```
 
-### 指定账号请求
-
-```bash
-curl http://localhost:5001/v1/chat/completions \
-  -H "Authorization: Bearer your-api-key" \
-  -H "X-Tool-Gateway-Target-Account: user@example.com" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "model": "deepseek-v4-flash",
-    "messages": [{"role": "user", "content": "你好"}]
-  }'
-```

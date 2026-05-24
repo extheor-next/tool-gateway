@@ -21,6 +21,8 @@ Tool Gateway 是一个面向 AI 大模型工具调用的通用网关项目：它
 
 文档入口：[文档导航](docs/README.md) / [架构说明](docs/ARCHITECTURE.md) / [接口文档](API.md)
 
+> 本项目的 DSML XML 工具调用格式参考了 [CJackHwang/ds2api](https://github.com/CJackHwang/ds2api)。
+
 > **重要免责声明**
 >
 > 本仓库仅供学习、研究、个人实验和内部验证使用，不提供任何形式的商业授权、适用性保证或结果保证。
@@ -122,6 +124,7 @@ flowchart LR
 | Ollama 兼容 | `GET /api/version`、`GET /api/tags`、`POST /api/show` |
 | 统一 CORS 兼容 | `/v1/*`、`/anthropic/*`、`/v1beta/models/*`、`/api/*`、`/admin/*` 统一走同一套 CORS 策略；Vercel 上 `/v1/chat/completions` 的 Node Runtime 也对齐相同放行规则，尽量减少第三方预检请求头限制 |
 | 多供应商管理 | 支持多个上游 AI 供应商（OpenAI / Claude / Gemini 等），可设置活跃供应商及每供应商并发限制 |
+| 上下文拆分 | 自动处理长对话上下文：DeepSeek / OpenAI 供应商上传为文件，Claude 供应商截断保留最近 N 条消息 |
 | 上游适配器 | 支持 OpenAI-compatible upstream，自动探测供应商模式（Auto/OpenAI/Claude/Gemini） |
 | Tool Calling | 防泄漏处理：非代码块高置信特征识别、`delta.tool_calls` 早发、结构化增量输出 |
 | Admin API | 配置管理、运行时设置热更新、代理管理、导入导出、Vercel 同步、版本检查 |
@@ -149,6 +152,7 @@ Tool Gateway 的模型层以“客户端模型名 → 上游模型名”的 alia
 - `config.example.json` 中的 `model_aliases` 决定最终转发到哪个上游模型。
 - `/v1/models` 返回当前网关暴露给客户端的模型列表；不同上游适配器可以按自己的能力补充 thinking、search、vision 等特性。
 - OpenAI、Claude、Gemini 三类入口共享同一套模型 alias 与 Tool Calling 语义，便于客户端无缝切换协议。
+- `/v1/models` 接口从活跃供应商实时拉取模型列表，不在 alias 中的模型名也会直接透传给上游供应商。
 
 ## 快速开始
 
@@ -244,7 +248,7 @@ cp config.example.json config.json
 base64 < config.json | tr -d '\n'
 ```
 
-> **流式说明**：OpenAI Chat 流式在 Vercel 上会由 `api/chat-stream.js`（Node Runtime）承接，但 `vercel.json` 只把规范路径 `/v1/chat/completions` 重写到 Node；根路径快捷别名 `/chat/completions` 仍走 Go 主链路。鉴权、账号选择、会话/PoW 准备仍由 Go 内部 prepare 接口完成；流式响应（含 `tools`）在 Node 侧执行与 Go 对齐的输出组装与防泄漏处理。Vercel 上需要实时流式时请使用 `/v1/chat/completions`。
+> **流式说明**：OpenAI Chat 流式在 Vercel 上会由 `api/chat-stream.js`（Node Runtime）承接，但 `vercel.json` 只把规范路径 `/v1/chat/completions` 重写到 Node；根路径快捷别名 `/chat/completions` 仍走 Go 主链路。会话/PoW 准备仍由 Go 内部 prepare 接口完成；流式响应（含 `tools`）在 Node 侧执行与 Go 对齐的输出组装与防泄漏处理。Vercel 上需要实时流式时请使用 `/v1/chat/completions`。
 
 详细部署说明请参阅 [部署指南](docs/DEPLOY.md)。
 
@@ -283,8 +287,8 @@ go run ./cmd/tool-gateway
 - `model_aliases`：OpenAI / Claude / Gemini 共用的模型 alias 映射。
 - `runtime`：全局并发上限，可通过 Admin Settings 热更新。
 - `auto_delete.mode`：请求结束后的远端会话清理策略，支持 `none` / `single` / `all`。
-- `current_input_file`：全局生效的上下文拆分上传策略；默认开启且阈值为 `0`，触发时将完整上下文合并上传为 `TOOL_GATEWAY_HISTORY.txt` 上下文文件。
-- 如果关闭 `current_input_file`，请求会直接透传，不上传拆分上下文文件。
+- `current_input_file`：全局生效的上下文拆分策略；默认开启，阈值 `min_chars` 为 `0`。DeepSeek / OpenAI 兼容供应商会将完整上下文上传为 `TOOL_GATEWAY_HISTORY.txt` 文件；Claude 供应商（无 Files API）则截断保留最近 `max_keep_messages`（默认 40）条消息。
+
 - `thinking_injection`：默认开启；在最新 user 消息末尾追加思考增强提示词，提高高强度推理与工具调用前的思考稳定性；`prompt` 留空时使用内置默认提示词。
 
 环境变量完整列表见 [部署指南](docs/DEPLOY.md)，接口鉴权规则见 [API.md](API.md#鉴权规则)。

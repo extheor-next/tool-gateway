@@ -31,8 +31,9 @@ func (h *Handler) getSettings(w http.ResponseWriter, _ *http.Request) {
 		"embeddings":  snap.Embeddings,
 		"auto_delete": snap.AutoDelete,
 		"current_input_file": map[string]any{
-			"enabled":   true,
-			"min_chars": 0,
+			"enabled":           h.Store.CurrentInputFileEnabled(),
+			"min_chars":         h.Store.CurrentInputFileMinChars(),
+			"max_keep_messages": h.Store.CurrentInputFileMaxKeepMessages(),
 		},
 		"thinking_injection": map[string]any{
 			"enabled":        true,

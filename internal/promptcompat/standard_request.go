@@ -10,9 +10,10 @@ type StandardRequest struct {
 	Messages                []any
 	HistoryText             string
 	PromptTokenText         string
-	CurrentInputFileApplied bool
-	CurrentInputFileID      string
-	CurrentToolsFileID      string
+	CurrentInputFileApplied   bool
+	CurrentInputFileTruncated bool
+	CurrentInputFileID        string
+	CurrentToolsFileID        string
 	ToolsRaw                any
 	FinalPrompt             string
 	ToolNames               []string
@@ -84,6 +85,7 @@ func (r StandardRequest) CompletionPayload(sessionID string) map[string]any {
 		"ref_file_ids":      refFileIDs,
 		"thinking_enabled":  r.Thinking,
 		"search_enabled":    r.Search,
+		"request_messages":  r.Messages,
 	}
 	for k, v := range r.PassThrough {
 		payload[k] = v

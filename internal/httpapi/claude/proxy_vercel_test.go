@@ -17,6 +17,8 @@ func (s claudeProxyStoreStub) ModelAliases() map[string]string { return s.aliase
 func (claudeProxyStoreStub) CurrentInputFileEnabled() bool { return true }
 func (claudeProxyStoreStub) CurrentInputFileMinChars() int { return 0 }
 
+func (claudeProxyStoreStub) CurrentInputFileMaxKeepMessages() int { return 40 }
+
 type openAIProxyStub struct {
 	status int
 	body   string

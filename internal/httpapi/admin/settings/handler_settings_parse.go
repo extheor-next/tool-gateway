@@ -126,6 +126,13 @@ func parseSettingsUpdateRequest(req map[string]any) (*config.AdminConfig, *confi
 			}
 			cfg.MinChars = n
 		}
+		if v, exists := raw["max_keep_messages"]; exists {
+			n := intFrom(v)
+			if err := config.ValidateIntRange("current_input_file.max_keep_messages", n, 4, 200, true); err != nil {
+				return nil, nil, nil, nil, nil, nil, nil, nil, err
+			}
+			cfg.MaxKeepMessages = n
+		}
 		if err := config.ValidateCurrentInputFileConfig(*cfg); err != nil {
 			return nil, nil, nil, nil, nil, nil, nil, nil, err
 		}

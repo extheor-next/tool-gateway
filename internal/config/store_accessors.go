@@ -128,6 +128,16 @@ func (s *Store) CurrentInputFileMinChars() int {
 	return s.cfg.CurrentInputFile.MinChars
 }
 
+func (s *Store) CurrentInputFileMaxKeepMessages() int {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	v := s.cfg.CurrentInputFile.MaxKeepMessages
+	if v <= 0 {
+		return 40
+	}
+	return v
+}
+
 func (s *Store) ThinkingInjectionEnabled() bool {
 	s.mu.RLock()
 	defer s.mu.RUnlock()

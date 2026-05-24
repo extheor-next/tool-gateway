@@ -42,6 +42,7 @@ type ConfigReader interface {
 	AutoDeleteSessions() bool
 	CurrentInputFileEnabled() bool
 	CurrentInputFileMinChars() int
+	CurrentInputFileMaxKeepMessages() int
 	ThinkingInjectionEnabled() bool
 	ThinkingInjectionPrompt() string
 }

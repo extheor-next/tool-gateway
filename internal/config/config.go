@@ -288,8 +288,9 @@ type AutoDeleteConfig struct {
 }
 
 type CurrentInputFileConfig struct {
-	Enabled  *bool `json:"enabled,omitempty"`
-	MinChars int   `json:"min_chars,omitempty"`
+	Enabled         *bool `json:"enabled,omitempty"`
+	MinChars        int   `json:"min_chars,omitempty"`
+	MaxKeepMessages int   `json:"max_keep_messages,omitempty"`
 }
 
 type ThinkingInjectionConfig struct {

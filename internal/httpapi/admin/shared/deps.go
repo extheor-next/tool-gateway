@@ -27,6 +27,9 @@ type ConfigStore interface {
 	ModelAliases() map[string]string
 	ExternalAI() config.ExternalAIConfig
 	ExternalAIProviders() config.ExternalAIProvidersConfig
+	CurrentInputFileEnabled() bool
+	CurrentInputFileMinChars() int
+	CurrentInputFileMaxKeepMessages() int
 }
 
 type OpenAIChatCaller interface {

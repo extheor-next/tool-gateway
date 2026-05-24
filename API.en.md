@@ -32,10 +32,6 @@ Docs: [Overview](README.en.md) / [Architecture](docs/ARCHITECTURE.en.md) / [Depl
 | Base URL | `http://localhost:5001` or your deployment domain |
 | Default Content-Type | `application/json` |
 | Health probes | `GET /healthz`, `GET /readyz` |
-| CORS | Enabled (uniformly covers `/v1/*`, `/anthropic/*`, `/v1beta/models/*`, `/api/*`, and `/admin/*`; echoes the browser `Origin` when present, otherwise `*`; default allow-list includes `Content-Type`, `Authorization`, `X-API-Key`, `X-Tool-Gateway-Target-Account`, `X-Tool-Gateway-Source`, `X-Vercel-Protection-Bypass`, `X-Goog-Api-Key`, `Anthropic-Version`, `Anthropic-Beta`, and also accepts third-party preflight-requested headers such as `x-stainless-*`; `/v1/chat/completions` on Vercel Node Runtime matches the same behavior; internal-only `X-Tool-Gateway-Internal-Token` remains blocked) |
-
-- All JSON request bodies must be valid UTF-8; malformed byte sequences are rejected on ingress with `400 invalid json`.
-
 ### 3.0 Adapter-Layer Notes
 
 - OpenAI / Claude / Gemini protocols are now mounted on one shared `chi` router tree assembled in `internal/server/router.go`.
@@ -80,16 +76,10 @@ Two header formats accepted:
 | Bearer Token | `Authorization: Bearer <token>` |
 | API Key Header | `x-api-key: <token>` (no `Bearer` prefix) |
 | Gemini-compatible | `x-goog-api-key: <token>` or `?key=<token>` / `?api_key=<token>` |
-
 **Auth behavior**:
 
-- Token is in `config.keys` → **Managed account mode**: Tool Gateway auto-selects an account via rotation
+- Token is in `config.keys` → Authenticated, request forwarded to upstream provider
 - Token is not in `config.keys` → request is rejected with `401 invalid api key`
-
-**Optional header**: `X-Tool-Gateway-Target-Account: <email_or_mobile>` — Pin a specific managed account; if the target account does not exist or the managed-account queue is exhausted, the request returns `429`, and current responses do not include `Retry-After`. If the account exists but login/refresh fails, the request returns the underlying `401` or upstream error. Without a pinned target, managed-account completion requests try one alternate-account fresh retry before returning an empty-output 429; pinned-target requests and requests with no other available account do not switch.
-Gemini-compatible clients can also send `x-goog-api-key`, `?key=`, or `?api_key=` as the caller credential source.
-
-### Admin Endpoints (`/admin/*`)
 
 | Endpoint | Auth |
 | --- | --- |
@@ -145,18 +135,10 @@ Gemini-compatible clients can also send `x-goog-api-key`, `?key=`, or `?api_key=
 | GET | `/admin/proxies` | Admin | List proxies |
 | POST | `/admin/proxies` | Admin | Add proxy |
 | PUT | `/admin/proxies/{proxyID}` | Admin | Update proxy (empty password keeps old secret) |
-| DELETE | `/admin/proxies/{proxyID}` | Admin | Delete proxy (auto-unbind referenced accounts) |
+| DELETE | `/admin/proxies/{proxyID}` | Admin | Delete proxy node |
 | POST | `/admin/proxies/test` | Admin | Test proxy connectivity |
-| GET | `/admin/accounts` | Admin | Paginated account list |
-| POST | `/admin/accounts` | Admin | Add account |
-| PUT | `/admin/accounts/{identifier}` | Admin | Update account name/remark |
-| DELETE | `/admin/accounts/{identifier}` | Admin | Delete account |
-| PUT | `/admin/accounts/{identifier}/proxy` | Admin | Bind/unbind proxy for an account |
-| GET | `/admin/queue/status` | Admin | Account queue status |
-| POST | `/admin/accounts/test` | Admin | Test one account |
-| POST | `/admin/accounts/test-all` | Admin | Test all accounts |
-| POST | `/admin/accounts/sessions/delete-all` | Admin | Delete all sessions for one account |
-| POST | `/admin/import` | Admin | Batch import keys/accounts |
+
+| POST | `/admin/import` | Admin | Batch import configuration |
 | POST | `/admin/test` | Admin | Test API through service |
 | POST | `/admin/dev/raw-samples/capture` | Admin | Fire one request and persist it as a raw sample |
 | GET | `/admin/dev/raw-samples/query` | Admin | Search current in-memory capture chains by prompt keyword |
@@ -199,7 +181,6 @@ OpenAI `/v1/*` paths are canonical. For clients configured with the bare Tool Ga
 ### `GET /v1/models`
 
 No auth required. Returns the currently supported upstream model list.
-
 **Response**:
 
 ```json
@@ -248,14 +229,12 @@ Retired historical families such as `claude-1.*`, `claude-2.*`, `claude-instant-
 ### `POST /v1/chat/completions`
 
 > Path note: besides the canonical `/v1/chat/completions`, Tool Gateway also accepts the root shortcut `/chat/completions`. On Vercel Runtime, `vercel.json` rewrites only the canonical `/v1/chat/completions` path to the Node streaming bridge; the root shortcut stays on the Go primary path. Use `/v1/chat/completions` on Vercel when real-time streaming is required.
-
 **Headers**:
 
 ```http
 Authorization: Bearer your-api-key
 Content-Type: application/json
 ```
-
 **Request body**:
 
 | Field | Type | Required | Notes |
@@ -311,7 +290,6 @@ data: {"id":"...","object":"chat.completion.chunk","choices":[{"delta":{},"index
 
 data: [DONE]
 ```
-
 **Field notes**:
 
 - First delta includes `role: assistant`
@@ -323,7 +301,6 @@ data: [DONE]
 #### Tool Calls
 
 When `tools` is present, Tool Gateway performs anti-leak handling:
-
 **Non-stream**: If detected, returns `message.tool_calls`, `finish_reason=tool_calls`, `message.content=null`.
 
 ```json
@@ -350,7 +327,6 @@ When `tools` is present, Tool Gateway performs anti-leak handling:
   ]
 }
 ```
-
 **Stream**: Once high-confidence toolcall features are matched, Tool Gateway emits `delta.tool_calls` immediately (without waiting for full argument closure), then keeps sending argument deltas; confirmed tool-call fragments are not forwarded as `delta.content`.
 
 Additional notes:
@@ -379,10 +355,8 @@ OpenAI Responses-style endpoint, accepting either `input` or `messages`.
 | `stream` | boolean | ❌ | Default `false` |
 | `tools` | array | ❌ | Same tool detection/translation policy as chat |
 | `tool_choice` | string/object | ❌ | Supports `auto`/`none`/`required` and forced function selection (`{"type":"function","name":"..."}`) |
-
 **Non-stream**: Returns a standard `response` object with an ID like `resp_xxx`, and stores it in in-memory TTL cache.
 If `tool_choice=required` and no valid tool call is produced, Tool Gateway returns HTTP `422` (`error.code=tool_choice_violation`).
-
 **Stream (SSE)**: minimal event sequence:
 
 ```text
@@ -466,7 +440,6 @@ Implementation-wise this path is unified on the OpenAI Chat Completions parse-an
 ### `GET /anthropic/v1/models`
 
 No auth required.
-
 **Response**:
 
 ```json
@@ -486,7 +459,6 @@ No auth required.
 > Note: the example is partial; besides the current primary aliases, the real response also includes Claude 4.x snapshots plus historical 3.x IDs and common aliases.
 
 ### `POST /anthropic/v1/messages`
-
 **Headers**:
 
 ```http
@@ -496,7 +468,6 @@ anthropic-version: 2023-06-01
 ```
 
 > `anthropic-version` is optional; Tool Gateway auto-fills `2023-06-01` when absent.
-
 **Request body**:
 
 | Field | Type | Required | Notes |
@@ -563,7 +534,6 @@ data: {"type":"message_delta","delta":{"stop_reason":"end_turn","stop_sequence":
 event: message_stop
 data: {"type":"message_stop"}
 ```
-
 **Notes**:
 
 - Models that support thinking emit `thinking` blocks / `thinking_delta` by default; explicit thinking disablement or `-nothinking` models suppress them
@@ -571,7 +541,6 @@ data: {"type":"message_stop"}
 - In `tools` mode, the stream avoids leaking raw tool JSON and does not force `input_json_delta`
 
 ### `POST /anthropic/v1/messages/count_tokens`
-
 **Request**:
 
 ```json
@@ -582,7 +551,6 @@ data: {"type":"message_stop"}
   ]
 }
 ```
-
 **Response**:
 
 ```json
@@ -647,7 +615,6 @@ Example response:
 ### `POST /admin/login`
 
 Public endpoint.
-
 **Request**:
 
 ```json
@@ -658,7 +625,6 @@ Public endpoint.
 ```
 
 `expire_hours` is optional, default `24`.
-
 **Response**:
 
 ```json
@@ -672,7 +638,6 @@ Public endpoint.
 ### `GET /admin/verify`
 
 Requires JWT: `Authorization: Bearer <jwt>`
-
 **Response**:
 
 ```json
@@ -718,17 +683,7 @@ Returns sanitized config, including both `keys` and `api_keys`.
     "project_id": "prj_xxx",
     "team_id": ""
   },
-  "accounts": [
-    {
-      "identifier": "user@example.com",
-      "email": "user@example.com",
-      "mobile": "",
-      "has_password": true,
-      "has_token": true,
-      "token_preview": "abcde..."
-    }
-  ],
-  "model_aliases": {
+    "model_aliases": {
     "claude-sonnet-4-6": "deepseek-v4-flash",
     "claude-opus-4-6": "deepseek-v4-pro"
   }
@@ -737,9 +692,8 @@ Returns sanitized config, including both `keys` and `api_keys`.
 
 ### `POST /admin/config`
 
-Only updates `keys`, `api_keys`, `accounts`, and `model_aliases`.
+Only updates `keys`, `api_keys`, and `model_aliases`.
 If both `api_keys` and `keys` are sent, the structured `api_keys` entries win so `name` / `remark` metadata is preserved; `keys` remains a legacy fallback.
-
 **Request**:
 
 ```json
@@ -749,10 +703,7 @@ If both `api_keys` and `keys` are sent, the structured `api_keys` entries win so
     {"key": "k1", "name": "Primary", "remark": "Production"},
     {"key": "k2", "name": "Backup", "remark": "Load test"}
   ],
-  "accounts": [
-    {"email": "user@example.com", "password": "pwd", "token": ""}
-  ],
-  "model_aliases": {
+    "model_aliases": {
     "claude-sonnet-4-6": "deepseek-v4-flash",
     "claude-opus-4-6": "deepseek-v4-pro"
   }
@@ -765,7 +716,7 @@ Reads runtime settings and status, including:
 
 - `success`
 - `admin` (`has_password_hash`, `jwt_expire_hours`, `jwt_valid_after_unix`, `default_password_warning`)
-- `runtime` (`account_max_inflight`, `account_max_queue`, `global_max_inflight`, `token_refresh_interval_hours`)
+- `runtime` (`global_max_inflight`): gateway global concurrency cap (0 = unlimited).
 - `responses` / `embeddings`
 - `auto_delete` (`mode`: `none` / `single` / `all`; legacy `sessions=true` is still treated as `all`)
 - `current_input_file` (`enabled` defaults to `true`, plus `min_chars`)
@@ -779,7 +730,6 @@ Reads runtime settings and status, including:
 Hot-updates runtime settings. Supported fields:
 
 - `admin.jwt_expire_hours`
-- `runtime.account_max_inflight` / `runtime.account_max_queue` / `runtime.global_max_inflight` / `runtime.token_refresh_interval_hours`
 - `responses.store_ttl_seconds`
 - `embeddings.provider`
 - `auto_delete.mode`
@@ -822,7 +772,6 @@ Exports full config in three forms: `config`, `json`, and `base64`.
 ```json
 {"key": "new-api-key", "name": "Primary", "remark": "Production"}
 ```
-
 **Response**: `{"success": true, "total_keys": 3}`
 
 ### `PUT /admin/keys/{key}`
@@ -832,11 +781,9 @@ Updates the `name` / `remark` of the specified API key. The path `key` is read-o
 ```json
 {"name": "Backup", "remark": "Load test"}
 ```
-
 **Response**: `{"success": true, "total_keys": 3}`
 
 ### `DELETE /admin/keys/{key}`
-
 **Response**: `{"success": true, "total_keys": 2}`
 
 ### `GET /admin/proxies`
@@ -853,190 +800,29 @@ Updates a proxy. If `password` is an empty string, the existing secret is preser
 
 ### `DELETE /admin/proxies/{proxyID}`
 
-Deletes a proxy and automatically clears `proxy_id` on all accounts that reference it.
+Deletes a proxy node.
 
 ### `POST /admin/proxies/test`
 
 Tests proxy connectivity: provide `proxy_id` to test a saved proxy; omit it to run a one-off test using proxy fields in the request body.
 
-### `GET /admin/accounts`
-
-**Query params**:
-
-| Param | Default | Range |
-| --- | --- | --- |
-| `page` | `1` | ≥ 1 |
-| `page_size` | `10` | 1–5000 |
-| `q` | empty | Filter by identifier / email / mobile |
-
-**Response**:
-
-```json
-{
-  "items": [
-    {
-      "identifier": "user@example.com",
-      "email": "user@example.com",
-      "mobile": "",
-      "has_password": true,
-      "has_token": true,
-      "token_preview": "abc...",
-      "test_status": "ok"
-    }
-  ],
-  "total": 25,
-  "page": 1,
-  "page_size": 10,
-  "total_pages": 3
-}
-```
-
-Returned items also include `test_status`, usually `ok` or `failed`.
-
-### `POST /admin/accounts`
-
-```json
-{"email": "user@example.com", "password": "pwd"}
-```
-
-**Response**: `{"success": true, "total_accounts": 6}`
-
-### `PUT /admin/accounts/{identifier}`
-
-Updates the `name` / `remark` of the specified account. The path `identifier` can be email or mobile and cannot be changed.
-
-```json
-{"name": "Primary account", "remark": "Shared with the team"}
-```
-
-**Response**: `{"success": true, "total_accounts": 6}`
-
-### `DELETE /admin/accounts/{identifier}`
-
-`identifier` can be email, mobile, or the synthetic id for token-only accounts (`token:<hash>`).
-
-**Response**: `{"success": true, "total_accounts": 5}`
-
-### `PUT /admin/accounts/{identifier}/proxy`
-
-Updates proxy binding for a specific account.
-
-- Request body: `{"proxy_id":"..."}`.
-- Use empty `proxy_id` to unbind proxy.
-- `identifier` supports email / mobile / token-only synthetic id.
-
-### `GET /admin/queue/status`
-
-```json
-{
-  "available": 3,
-  "in_use": 1,
-  "total": 4,
-  "available_accounts": ["a@example.com"],
-  "in_use_accounts": ["b@example.com"],
-  "max_inflight_per_account": 2,
-  "global_max_inflight": 8,
-  "recommended_concurrency": 8,
-  "waiting": 0,
-  "max_queue_size": 8
-}
-```
-
-| Field | Description |
-| --- | --- |
-| `available` | Accounts that still have spare inflight capacity |
-| `in_use` | Number of occupied in-flight slots |
-| `total` | Total accounts |
-| `available_accounts` | List of account IDs with remaining inflight capacity |
-| `in_use_accounts` | List of account IDs currently in use |
-| `max_inflight_per_account` | Per-account inflight limit |
-| `global_max_inflight` | Global inflight limit |
-| `recommended_concurrency` | Suggested concurrency (`total × max_inflight_per_account`) |
-| `waiting` | Number of queued requests currently waiting |
-| `max_queue_size` | Waiting queue limit |
-
-### `POST /admin/accounts/test`
-
-| Field | Required | Notes |
-| --- | --- | --- |
-| `identifier` | ✅ | email / mobile / token-only synthetic id |
-| `model` | ❌ | default `deepseek-v4-flash` |
-| `message` | ❌ | if empty, only session creation is tested |
-
-**Response**:
-
-```json
-{
-  "account": "user@example.com",
-  "success": true,
-  "response_time": 1240,
-  "message": "API test successful (session creation only)",
-  "model": "deepseek-v4-flash",
-  "session_count": 0,
-  "config_writable": true,
-  "config_warning": ""
-}
-```
-
-If a `message` is provided, `thinking` may also be included when the upstream response carries reasoning text.
-
-When the configured file path is not writable (for example, read-only `/app/config.json` inside some containers), login/session testing still proceeds; `config_warning` is returned to indicate token persistence failed and the token is memory-only until restart.
-
-### `POST /admin/accounts/test-all`
-
-Optional request field: `model`.
-
-```json
-{
-  "total": 5,
-  "success": 4,
-  "failed": 1,
-  "results": [...]
-}
-```
-
-The internal concurrency limit is currently fixed at 5.
-
-### `POST /admin/accounts/sessions/delete-all`
-
-Deletes all upstream sessions for a specific account. Request example:
-
-```json
-{"identifier":"user@example.com"}
-```
-
-Response:
-
-```json
-{"success": true, "message": "删除成功"}
-```
-
-If the account is missing or deletion fails, `success` becomes `false` and `message` contains the error.
-The current handler returns the Chinese literal `删除成功` on success.
-
 ### `POST /admin/import`
 
-Batch import keys and accounts.
-
+Batch import keys and provider configuration.
 **Request**:
 
 ```json
 {
-  "keys": ["k1", "k2"],
-  "accounts": [
-    {"email": "user@example.com", "password": "pwd", "token": ""}
-  ]
-}
+  "keys": ["k1", "k2"]
+  }
 ```
-
 **Response**:
 
 ```json
 {
   "success": true,
   "imported_keys": 2,
-  "imported_accounts": 1
-}
+  }
 ```
 
 ### `POST /admin/test`
@@ -1048,7 +834,6 @@ Test API availability through the service itself.
 | `model` | ❌ | `deepseek-v4-flash` |
 | `message` | ❌ | `你好` |
 | `api_key` | ❌ | First key in config |
-
 **Response**:
 
 ```json
@@ -1090,14 +875,12 @@ If the request itself succeeds but the process did not record a new upstream cap
 ### `GET /admin/dev/raw-samples/query`
 
 Searches the current process's in-memory capture entries and groups `completion + continue` rounds by `chat_session_id`.
-
 **Query parameters**:
 
 | Param | Default | Notes |
 | --- | --- | --- |
 | `q` | empty | Fuzzy match against request/response text |
 | `limit` | `20` | Max number of chains returned |
-
 **Response fields** include:
 
 - `items[].chain_key`
@@ -1136,13 +919,11 @@ The success payload includes `sample_id`, `dir`, `meta_path`, and `upstream_path
 | `team_id` | ❌ | Fallback: `VERCEL_TEAM_ID`, then saved config |
 | `auto_validate` | ❌ | Default `true` |
 | `save_credentials` | ❌ | Default `true`; saves explicitly supplied Vercel credentials for the next sync |
-
 **Success response**:
 
 ```json
 {
   "success": true,
-  "validated_accounts": 3,
   "message": "Config synced, redeploying...",
   "deployment_url": "https://..."
 }
@@ -1153,7 +934,6 @@ Or manual deploy required:
 ```json
 {
   "success": true,
-  "validated_accounts": 3,
   "message": "Config synced to Vercel, please trigger redeploy manually",
   "manual_deploy_required": true
 }
@@ -1259,13 +1039,12 @@ Gemini routes use Google-style errors:
 ```
 
 Clients should handle HTTP status code plus `error` / `detail` fields.
-
 **Common status codes**:
 
 | Code | Meaning |
 | --- | --- |
 | `401` | Authentication failed (invalid key/token, or expired admin JWT) |
-| `429` | Too many requests (exceeded inflight + queue capacity, or upstream thinking-only output with no visible answer; managed-account mode first tries one alternate-account fresh retry; current responses do not include `Retry-After`) |
+| `429` | Too many requests (exceeded global or provider concurrency limit). |
 | `503` | Model unavailable or upstream error |
 
 ---
@@ -1433,15 +1212,3 @@ curl http://localhost:5001/admin/login \
   -d '{"admin_key": "admin"}'
 ```
 
-### Pin Specific Account
-
-```bash
-curl http://localhost:5001/v1/chat/completions \
-  -H "Authorization: Bearer your-api-key" \
-  -H "X-Tool-Gateway-Target-Account: user@example.com" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "model": "deepseek-v4-flash",
-    "messages": [{"role": "user", "content": "Hello"}]
-  }'
-```

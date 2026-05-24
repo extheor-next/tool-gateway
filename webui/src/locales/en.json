@@ -376,7 +376,11 @@
         "defaultPasswordWarning": "You are using the default admin password. Please change it.",
         "vercelSyncHint": "Configuration changed. For Vercel deployments, sync manually in Vercel Sync and redeploy.",
         "autoFetchPaused": "Auto loading paused after {count} failures: {error}",
-        "retryLoad": "Retry now"
+        "retryLoad": "Retry now",
+        "providerLimitsTitle": "Provider Concurrency",
+        "providerLimitsDesc": "Set per-provider max inflight and max queue size. 0 means unlimited.",
+        "currentInputFileMaxKeepMessages": "Max keep messages (external)",
+        "currentInputFileMaxKeepHelp": "For external AI providers, keep at most the last N messages per request. Default 40."
     },
     "login": {
         "welcome": "Welcome back",
@@ -433,7 +437,7 @@
         "description": "Manage multiple upstream AI providers and choose the active one.",
         "addProvider": "Add provider",
         "editProvider": "Edit provider",
-        "save": "Save provider",
+        "save": "Save",
         "saving": "Saving...",
         "saveSuccess": "Provider configuration saved.",
         "deleteConfirm": "Delete this provider?",
@@ -467,6 +471,8 @@
         },
         "fetchModels": "Fetch models",
         "selectModel": "-- Select a model --",
-        "fetchingModels": "Fetching models..."
+        "fetchingModels": "Fetching models...",
+        "maxInflightShort": "Inflight",
+        "maxQueueShort": "Queue"
     }
 }

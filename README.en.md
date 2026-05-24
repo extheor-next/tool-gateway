@@ -20,6 +20,8 @@ Tool Gateway is a generic gateway for AI model tool calling. It normalizes diffe
 
 Documentation entry: [Docs Index](docs/README.md) / [Architecture](docs/ARCHITECTURE.en.md) / [API Reference](API.en.md)
 
+> The DSML XML tool call format in this project references [CJackHwang/ds2api](https://github.com/CJackHwang/ds2api).
+
 ## Star History
 
 <a href="https://www.star-history.com/?repos=extheor-next%2Ftool-gateway&type=date&legend=top-left">

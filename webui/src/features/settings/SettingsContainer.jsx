@@ -8,8 +8,9 @@ import CurrentInputFileSection from './CurrentInputFileSection'
 import AutoDeleteSection from './AutoDeleteSection'
 import ModelSection from './ModelSection'
 import BackupSection from './BackupSection'
+import ProviderLimitsSection from './ProviderLimitsSection'
 
-export default function SettingsContainer({ onRefresh, onMessage, authFetch, onForceLogout, isVercel = false }) {
+export default function SettingsContainer({ config, onRefresh, onMessage, authFetch, onForceLogout, isVercel = false }) {
     const { t } = useI18n()
     const apiFetch = authFetch || fetch
 
@@ -91,6 +92,8 @@ export default function SettingsContainer({ onRefresh, onMessage, authFetch, onF
             />
 
             <BehaviorSection t={t} form={form} setForm={setForm} />
+
+            <ProviderLimitsSection t={t} config={config} apiFetch={apiFetch} onRefresh={onRefresh} onMessage={onMessage} />
 
             <CurrentInputFileSection t={t} form={form} setForm={setForm} />
 

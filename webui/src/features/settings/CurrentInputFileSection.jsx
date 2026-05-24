@@ -42,6 +42,24 @@ export default function CurrentInputFileSection({ t, form, setForm }) {
                     />
                     <p className="text-xs text-muted-foreground">{t('settings.currentInputFileHelp')}</p>
                 </label>
+                <label className="text-sm space-y-2">
+                    <span className="text-muted-foreground">{t('settings.currentInputFileMaxKeepMessages')}</span>
+                    <input
+                        type="number"
+                        min={4}
+                        max={200}
+                        value={form.current_input_file?.max_keep_messages ?? 40}
+                        onChange={(e) => setForm((prev) => ({
+                            ...prev,
+                            current_input_file: {
+                                ...prev.current_input_file,
+                                max_keep_messages: Number(e.target.value || 40),
+                            },
+                        }))}
+                        className="w-full bg-background border border-border rounded-lg px-3 py-2"
+                    />
+                    <p className="text-xs text-muted-foreground">{t('settings.currentInputFileMaxKeepHelp')}</p>
+                </label>
             </div>
         </div>
     )

@@ -22,6 +22,7 @@ const (
 type CurrentInputConfigReader interface {
 	CurrentInputFileEnabled() bool
 	CurrentInputFileMinChars() int
+	CurrentInputFileMaxKeepMessages() int
 }
 
 type CurrentInputUploader interface {
@@ -42,7 +43,7 @@ func (s Service) ApplyCurrentInputFile(ctx context.Context, stdReq promptcompat.
 		return stdReq, nil
 	}
 	if marker, ok := s.Backend.(ExternalAIAdapterMarker); ok && marker.ExternalAIAdapter() {
-		return stdReq, nil
+		return s.applyTruncationForExternalProvider(stdReq)
 	}
 	threshold := s.Store.CurrentInputFileMinChars()
 
@@ -250,4 +251,80 @@ func replaceGeneratedCurrentInputRefs(existing []string, oldHistoryID, oldToolsI
 		filtered = append(filtered, trimmed)
 	}
 	return prependUniqueRefFileIDs(filtered, newHistoryID, newToolsID)
+}
+type fileUploader interface {
+	UploadFileToProvider(ctx context.Context, filename string, content []byte) (string, error)
+}
+
+// applyTruncationForExternalProvider handles context splitting for external AI providers.
+// If the provider supports file upload (OpenAI-compatible Files API), the context is uploaded
+// as TOOL_GATEWAY_HISTORY.txt. Otherwise, messages are truncated.
+func (s Service) applyTruncationForExternalProvider(stdReq promptcompat.StandardRequest) (promptcompat.StandardRequest, error) {
+	threshold := s.Store.CurrentInputFileMinChars()
+
+	totalChars := 0
+	for _, m := range stdReq.Messages {
+		if msg, ok := m.(map[string]any); ok {
+			if content, _ := msg["content"].(string); content != "" {
+				totalChars += len([]rune(content))
+			}
+		}
+	}
+	if totalChars < threshold {
+		return stdReq, nil
+	}
+
+	fileText := promptcompat.BuildOpenAICurrentInputContextTranscript(stdReq.Messages)
+	if strings.TrimSpace(fileText) == "" {
+		return stdReq, nil
+	}
+
+	// Try file upload if provider supports it
+	if uploader, ok := s.Backend.(fileUploader); ok {
+		reqCopy := stdReq
+		fileID, err := uploader.UploadFileToProvider(context.Background(), currentInputFilename, []byte(fileText))
+		if err == nil && fileID != "" {
+			messages := []any{
+				map[string]any{
+					"role":    "user",
+					"content": currentInputFilePrompt(false),
+				},
+			}
+			reqCopy.Messages = messages
+			reqCopy.HistoryText = fileText
+			reqCopy.CurrentInputFileApplied = true
+			reqCopy.CurrentInputFileID = fileID
+			reqCopy.FinalPrompt, reqCopy.ToolNames = promptcompat.BuildOpenAIPromptWithToolInstructionsOnly(messages, reqCopy.ToolsRaw, "", reqCopy.ToolChoice, reqCopy.Thinking)
+			reqCopy.PromptTokenText = strings.Join([]string{fileText, reqCopy.FinalPrompt}, "\n")
+			return reqCopy, nil
+		}
+	}
+
+	// Fallback: truncate messages
+	maxKeep := s.Store.CurrentInputFileMaxKeepMessages()
+	keep := make([]any, 0)
+	i := 0
+	for i < len(stdReq.Messages) {
+		msg, ok := stdReq.Messages[i].(map[string]any)
+		if !ok {
+			i++
+			continue
+		}
+		role, _ := msg["role"].(string)
+		if role != "system" {
+			break
+		}
+		keep = append(keep, msg)
+		i++
+	}
+	nonSystem := stdReq.Messages[i:]
+	if len(nonSystem) > maxKeep {
+		nonSystem = nonSystem[len(nonSystem)-maxKeep:]
+	}
+	keep = append(keep, nonSystem...)
+	stdReq.Messages = keep
+	stdReq.CurrentInputFileApplied = true
+	stdReq.CurrentInputFileTruncated = true
+	stdReq.FinalPrompt, stdReq.ToolNames = promptcompat.BuildOpenAIPromptWithToolInstructionsOnly(keep, stdReq.ToolsRaw, "", stdReq.ToolChoice, stdReq.Thinking)
+	return stdReq, nil
 }
