@@ -20,9 +20,6 @@ func (c Config) MarshalJSON() ([]byte, error) {
 	if len(c.APIKeys) > 0 {
 		m["api_keys"] = c.APIKeys
 	}
-	if len(c.Accounts) > 0 {
-		m["accounts"] = c.Accounts
-	}
 	if len(c.Proxies) > 0 {
 		m["proxies"] = c.Proxies
 	}
@@ -32,7 +29,7 @@ func (c Config) MarshalJSON() ([]byte, error) {
 	if strings.TrimSpace(c.Admin.PasswordHash) != "" || c.Admin.JWTExpireHours > 0 || c.Admin.JWTValidAfterUnix > 0 {
 		m["admin"] = c.Admin
 	}
-	if c.Runtime.AccountMaxInflight > 0 || c.Runtime.AccountMaxQueue > 0 || c.Runtime.GlobalMaxInflight > 0 || c.Runtime.TokenRefreshIntervalHours > 0 {
+	if c.Runtime.GlobalMaxInflight > 0 || c.Runtime.TokenRefreshIntervalHours > 0 {
 		m["runtime"] = c.Runtime
 	}
 	if c.Responses.StoreTTLSeconds > 0 {
@@ -80,10 +77,6 @@ func (c *Config) UnmarshalJSON(b []byte) error {
 			}
 		case "api_keys":
 			if err := json.Unmarshal(v, &c.APIKeys); err != nil {
-				return fmt.Errorf("invalid field %q: %w", k, err)
-			}
-		case "accounts":
-			if err := json.Unmarshal(v, &c.Accounts); err != nil {
 				return fmt.Errorf("invalid field %q: %w", k, err)
 			}
 		case "proxies":
@@ -169,7 +162,6 @@ func (c Config) Clone() Config {
 	clone := Config{
 		Keys:         slices.Clone(c.Keys),
 		APIKeys:      slices.Clone(c.APIKeys),
-		Accounts:     slices.Clone(c.Accounts),
 		Proxies:      slices.Clone(c.Proxies),
 		ModelAliases: cloneStringMap(c.ModelAliases),
 		Admin:        c.Admin,

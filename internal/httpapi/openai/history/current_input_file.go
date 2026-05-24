@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"strings"
 
-	"tool-gateway/internal/auth"
 	"tool-gateway/internal/config"
 	dsclient "tool-gateway/internal/deepseek/client"
 	"tool-gateway/internal/httpapi/openai/shared"
@@ -26,7 +25,7 @@ type CurrentInputConfigReader interface {
 }
 
 type CurrentInputUploader interface {
-	UploadFile(ctx context.Context, a *auth.RequestAuth, req dsclient.UploadFileRequest, maxAttempts int) (*dsclient.UploadFileResult, error)
+	UploadFile(ctx context.Context, req dsclient.UploadFileRequest, maxAttempts int) (*dsclient.UploadFileResult, error)
 }
 
 type ExternalAIAdapterMarker interface {
@@ -38,8 +37,8 @@ type Service struct {
 	Backend CurrentInputUploader
 }
 
-func (s Service) ApplyCurrentInputFile(ctx context.Context, a *auth.RequestAuth, stdReq promptcompat.StandardRequest) (promptcompat.StandardRequest, error) {
-	if stdReq.CurrentInputFileApplied || s.Backend == nil || s.Store == nil || a == nil || !s.Store.CurrentInputFileEnabled() {
+func (s Service) ApplyCurrentInputFile(ctx context.Context, stdReq promptcompat.StandardRequest) (promptcompat.StandardRequest, error) {
+	if stdReq.CurrentInputFileApplied || s.Backend == nil || s.Store == nil || !s.Store.CurrentInputFileEnabled() {
 		return stdReq, nil
 	}
 	if marker, ok := s.Backend.(ExternalAIAdapterMarker); ok && marker.ExternalAIAdapter() {
@@ -63,7 +62,7 @@ func (s Service) ApplyCurrentInputFile(ctx context.Context, a *auth.RequestAuth,
 	if resolvedType, ok := config.GetModelType(stdReq.ResolvedModel); ok {
 		modelType = resolvedType
 	}
-	result, err := s.Backend.UploadFile(ctx, a, dsclient.UploadFileRequest{
+	result, err := s.Backend.UploadFile(ctx, dsclient.UploadFileRequest{
 		Filename:    currentInputFilename,
 		ContentType: currentInputContentType,
 		Purpose:     currentInputPurpose,
@@ -80,7 +79,7 @@ func (s Service) ApplyCurrentInputFile(ctx context.Context, a *auth.RequestAuth,
 
 	toolFileID := ""
 	if strings.TrimSpace(toolsText) != "" {
-		result, err := s.Backend.UploadFile(ctx, a, dsclient.UploadFileRequest{
+		result, err := s.Backend.UploadFile(ctx, dsclient.UploadFileRequest{
 			Filename:    currentToolsFilename,
 			ContentType: currentInputContentType,
 			Purpose:     currentInputPurpose,
@@ -110,8 +109,6 @@ func (s Service) ApplyCurrentInputFile(ctx context.Context, a *auth.RequestAuth,
 	stdReq.CurrentToolsFileID = toolFileID
 	stdReq.RefFileIDs = prependUniqueRefFileIDs(stdReq.RefFileIDs, fileID, toolFileID)
 	stdReq.FinalPrompt, stdReq.ToolNames = promptcompat.BuildOpenAIPromptWithToolInstructionsOnly(messages, stdReq.ToolsRaw, "", stdReq.ToolChoice, stdReq.Thinking)
-	// Token accounting must reflect the actual downstream context:
-	// uploaded context files + the continuation live prompt.
 	tokenParts := []string{fileText}
 	if strings.TrimSpace(toolsText) != "" {
 		tokenParts = append(tokenParts, toolsText)
@@ -121,8 +118,8 @@ func (s Service) ApplyCurrentInputFile(ctx context.Context, a *auth.RequestAuth,
 	return stdReq, nil
 }
 
-func (s Service) ReuploadAppliedCurrentInputFile(ctx context.Context, a *auth.RequestAuth, stdReq promptcompat.StandardRequest) (promptcompat.StandardRequest, error) {
-	if !stdReq.CurrentInputFileApplied || s.Backend == nil || a == nil {
+func (s Service) ReuploadAppliedCurrentInputFile(ctx context.Context, stdReq promptcompat.StandardRequest) (promptcompat.StandardRequest, error) {
+	if !stdReq.CurrentInputFileApplied || s.Backend == nil {
 		return stdReq, nil
 	}
 	if marker, ok := s.Backend.(ExternalAIAdapterMarker); ok && marker.ExternalAIAdapter() {
@@ -136,7 +133,7 @@ func (s Service) ReuploadAppliedCurrentInputFile(ctx context.Context, a *auth.Re
 	if resolvedType, ok := config.GetModelType(stdReq.ResolvedModel); ok {
 		modelType = resolvedType
 	}
-	result, err := s.Backend.UploadFile(ctx, a, dsclient.UploadFileRequest{
+	result, err := s.Backend.UploadFile(ctx, dsclient.UploadFileRequest{
 		Filename:    currentInputFilename,
 		ContentType: currentInputContentType,
 		Purpose:     currentInputPurpose,
@@ -154,7 +151,7 @@ func (s Service) ReuploadAppliedCurrentInputFile(ctx context.Context, a *auth.Re
 	toolsText, _ := promptcompat.BuildOpenAIToolsContextTranscript(stdReq.ToolsRaw, stdReq.ToolChoice)
 	toolFileID := ""
 	if strings.TrimSpace(toolsText) != "" {
-		result, err := s.Backend.UploadFile(ctx, a, dsclient.UploadFileRequest{
+		result, err := s.Backend.UploadFile(ctx, dsclient.UploadFileRequest{
 			Filename:    currentToolsFilename,
 			ContentType: currentInputContentType,
 			Purpose:     currentInputPurpose,

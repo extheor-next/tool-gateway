@@ -13,7 +13,6 @@ import (
 	"testing"
 	"time"
 
-	"tool-gateway/internal/auth"
 	powpkg "tool-gateway/pow"
 )
 
@@ -136,7 +135,8 @@ func TestUploadFileUsesUploadTargetPowAndMultipartHeaders(t *testing.T) {
 		})},
 		maxRetries: 1,
 	}
-	result, err := client.UploadFile(context.Background(), &auth.RequestAuth{DeepSeekToken: "token", TriedAccounts: map[string]bool{}}, UploadFileRequest{
+	client.deepseekKey = "token"
+	result, err := client.UploadFile(context.Background(), UploadFileRequest{
 		Filename:    "demo.txt",
 		ContentType: "text/plain",
 		Purpose:     "assistants",
@@ -228,7 +228,8 @@ func TestUploadFileWaitsForProcessedFetchFiles(t *testing.T) {
 		maxRetries: 1,
 	}
 
-	result, err := client.UploadFile(context.Background(), &auth.RequestAuth{DeepSeekToken: "token", TriedAccounts: map[string]bool{}}, UploadFileRequest{
+	client.deepseekKey = "token"
+	result, err := client.UploadFile(context.Background(), UploadFileRequest{
 		Filename:    "demo.txt",
 		ContentType: "text/plain",
 		Purpose:     "assistants",

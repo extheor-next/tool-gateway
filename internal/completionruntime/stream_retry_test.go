@@ -7,9 +7,6 @@ import (
 	"strings"
 	"testing"
 
-	"tool-gateway/internal/account"
-	"tool-gateway/internal/auth"
-	"tool-gateway/internal/config"
 	"tool-gateway/internal/httpapi/openai/shared"
 )
 
@@ -22,7 +19,7 @@ func TestExecuteStreamWithRetryUsesSharedRetryPayloadAndUsagePrompt(t *testing.T
 	attemptsSeen := 0
 	retryPrompt := ""
 
-	ExecuteStreamWithRetry(context.Background(), ds, &auth.RequestAuth{}, initial, payload, "pow", StreamRetryOptions{
+	ExecuteStreamWithRetry(context.Background(), ds, initial, payload, "pow", StreamRetryOptions{
 		Surface:      "test.stream",
 		Stream:       true,
 		RetryEnabled: true,
@@ -63,88 +60,3 @@ func TestExecuteStreamWithRetryUsesSharedRetryPayloadAndUsagePrompt(t *testing.T
 	}
 }
 
-func TestExecuteStreamWithRetrySwitchesManagedAccountBeforeFinal429(t *testing.T) {
-	t.Setenv("TOOL_GATEWAY_CONFIG_JSON", `{
-		"keys":["managed-key"],
-		"accounts":[
-			{"email":"acc1@test.com","password":"pwd"},
-			{"email":"acc2@test.com","password":"pwd"}
-		]
-	}`)
-	store := config.LoadStore()
-	resolver := auth.NewResolver(store, account.NewPool(store), func(_ context.Context, acc config.Account) (string, error) {
-		return "token-" + acc.Identifier(), nil
-	})
-	req, _ := http.NewRequest(http.MethodPost, "/", nil)
-	req.Header.Set("Authorization", "Bearer managed-key")
-	a, err := resolver.Determine(req)
-	if err != nil {
-		t.Fatalf("determine failed: %v", err)
-	}
-	defer resolver.Release(a)
-
-	ds := &fakeCompletionBackend{
-		sessionByAccount: true,
-		responses: []*http.Response{
-			sseHTTPResponse(http.StatusOK, `data: {"response_message_id":12,"p":"response/thinking_content","v":"retry empty"}`),
-			sseHTTPResponse(http.StatusOK, `data: {"response_message_id":21,"p":"response/content","v":"ok from second account"}`),
-		},
-	}
-	initial := sseHTTPResponse(http.StatusOK, `data: {"response_message_id":11,"p":"response/thinking_content","v":"first empty"}`)
-	payload := map[string]any{"prompt": "original prompt", "chat_session_id": "session-acc1@test.com"}
-	attemptsSeen := 0
-	switchedSession := ""
-
-	ExecuteStreamWithRetry(context.Background(), ds, a, initial, payload, "pow", StreamRetryOptions{
-		Surface:          "test.stream",
-		Stream:           true,
-		RetryEnabled:     true,
-		RetryMaxAttempts: 1,
-		UsagePrompt:      "original prompt",
-	}, StreamRetryHooks{
-		ConsumeAttempt: func(resp *http.Response, allowDeferEmpty bool) (bool, bool) {
-			defer func() {
-				if err := resp.Body.Close(); err != nil {
-					t.Fatalf("close failed: %v", err)
-				}
-			}()
-			body, _ := io.ReadAll(resp.Body)
-			attemptsSeen++
-			if strings.Contains(string(body), "ok from second account") {
-				return true, false
-			}
-			if !allowDeferEmpty {
-				t.Fatalf("expected empty attempt %d to be deferred before final 429", attemptsSeen)
-			}
-			return false, true
-		},
-		ParentMessageID: func() int {
-			return 11 + attemptsSeen
-		},
-		OnAccountSwitch: func(sessionID string) {
-			switchedSession = sessionID
-		},
-	})
-
-	if attemptsSeen != 3 {
-		t.Fatalf("expected three stream attempts, got %d", attemptsSeen)
-	}
-	if switchedSession != "session-acc2@test.com" {
-		t.Fatalf("expected switched session id, got %q", switchedSession)
-	}
-	wantAccounts := []string{"acc1@test.com", "acc2@test.com"}
-	if len(ds.completionAccounts) != len(wantAccounts) {
-		t.Fatalf("completion accounts mismatch: got %v want %v", ds.completionAccounts, wantAccounts)
-	}
-	for i, want := range wantAccounts {
-		if ds.completionAccounts[i] != want {
-			t.Fatalf("completion account %d = %q want %q (all=%v)", i, ds.completionAccounts[i], want, ds.completionAccounts)
-		}
-	}
-	if got := ds.payloads[1]["chat_session_id"]; got != "session-acc2@test.com" {
-		t.Fatalf("switched payload session mismatch: %#v", got)
-	}
-	if prompt, _ := ds.payloads[1]["prompt"].(string); strings.Contains(prompt, shared.EmptyOutputRetrySuffix) {
-		t.Fatalf("expected switched-account prompt without empty-output suffix, got %q", prompt)
-	}
-}

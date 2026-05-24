@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"tool-gateway/internal/assistantturn"
-	"tool-gateway/internal/auth"
 	"tool-gateway/internal/completionruntime"
 	"tool-gateway/internal/config"
 	dsprotocol "tool-gateway/internal/deepseek/protocol"
@@ -37,23 +36,15 @@ func (h *Handler) ChatCompletions(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	a, err := h.Auth.Determine(r)
+	_, err := h.Auth.Determine(r)
 	if err != nil {
-		status := http.StatusUnauthorized
-		detail := err.Error()
-		if err == auth.ErrNoAccount {
-			status = http.StatusTooManyRequests
-		}
-		writeOpenAIError(w, status, detail)
+		writeOpenAIError(w, http.StatusUnauthorized, err.Error())
 		return
 	}
 	var sessionID string
 	defer func() {
-		h.autoDeleteRemoteSession(r.Context(), a, sessionID)
-		h.Auth.Release(a)
+		h.autoDeleteRemoteSession(r.Context(), sessionID)
 	}()
-
-	r = r.WithContext(auth.WithAuth(r.Context(), a))
 
 	r.Body = http.MaxBytesReader(w, r.Body, openAIGeneralMaxSize)
 	var req map[string]any
@@ -65,7 +56,7 @@ func (h *Handler) ChatCompletions(w http.ResponseWriter, r *http.Request) {
 		writeOpenAIError(w, http.StatusBadRequest, "invalid json")
 		return
 	}
-	if err := h.preprocessInlineFileInputs(r.Context(), a, req); err != nil {
+	if err := h.preprocessInlineFileInputs(r.Context(), req); err != nil {
 		writeOpenAIInlineFileError(w, err)
 		return
 	}
@@ -74,16 +65,16 @@ func (h *Handler) ChatCompletions(w http.ResponseWriter, r *http.Request) {
 		writeOpenAIError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	stdReq, err = h.applyCurrentInputFile(r.Context(), a, stdReq)
+	stdReq, err = h.applyCurrentInputFile(r.Context(), stdReq)
 	if err != nil {
 		status, message := mapCurrentInputFileError(err)
 		writeOpenAIError(w, status, message)
 		return
 	}
-	historySession := startChatHistory(h.ChatHistory, r, a, stdReq)
+	historySession := startChatHistory(h.ChatHistory, r, stdReq)
 
 	if !stdReq.Stream {
-		result, outErr := completionruntime.ExecuteNonStreamWithRetry(r.Context(), h.Backend, a, stdReq, completionruntime.Options{
+		result, outErr := completionruntime.ExecuteNonStreamWithRetry(r.Context(), h.Backend, stdReq, completionruntime.Options{
 			RetryEnabled:     true,
 			CurrentInputFile: h.Store,
 		})
@@ -105,7 +96,7 @@ func (h *Handler) ChatCompletions(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	start, outErr := completionruntime.StartCompletion(r.Context(), h.Backend, a, stdReq, completionruntime.Options{
+	start, outErr := completionruntime.StartCompletion(r.Context(), h.Backend, stdReq, completionruntime.Options{
 		CurrentInputFile: h.Store,
 	})
 	sessionID = start.SessionID
@@ -118,12 +109,12 @@ func (h *Handler) ChatCompletions(w http.ResponseWriter, r *http.Request) {
 	}
 	streamReq := start.Request
 	refFileTokens := streamReq.RefFileTokens
-	h.handleStreamWithRetry(w, r, a, start.Response, start.Payload, start.Pow, sessionID, &sessionID, streamReq, streamReq.ResponseModel, streamReq.PromptTokenText, refFileTokens, streamReq.Thinking, streamReq.Search, streamReq.ToolNames, streamReq.ToolsRaw, streamReq.ToolChoice, historySession)
+	h.handleStreamWithRetry(w, r, start.Response, start.Payload, start.Pow, sessionID, &sessionID, streamReq, streamReq.ResponseModel, streamReq.PromptTokenText, refFileTokens, streamReq.Thinking, streamReq.Search, streamReq.ToolNames, streamReq.ToolsRaw, streamReq.ToolChoice, historySession)
 }
 
-func (h *Handler) autoDeleteRemoteSession(ctx context.Context, a *auth.RequestAuth, sessionID string) {
+func (h *Handler) autoDeleteRemoteSession(ctx context.Context, sessionID string) {
 	mode := h.Store.AutoDeleteMode()
-	if mode == "none" || a.DeepSeekToken == "" {
+	if mode == "none" {
 		return
 	}
 
@@ -134,23 +125,23 @@ func (h *Handler) autoDeleteRemoteSession(ctx context.Context, a *auth.RequestAu
 	switch mode {
 	case "single":
 		if sessionID == "" {
-			config.Logger.Warn("[auto_delete_sessions] skipped single-session delete because session_id is empty", "account", a.AccountID)
+			config.Logger.Warn("[auto_delete_sessions] skipped single-session delete because session_id is empty")
 			return
 		}
-		_, err := h.Backend.DeleteSessionForToken(deleteCtx, a.DeepSeekToken, sessionID)
+		_, err := h.Backend.DeleteSession(deleteCtx, sessionID, 3)
 		if err != nil {
-			config.Logger.Warn("[auto_delete_sessions] failed", "account", a.AccountID, "mode", mode, "session_id", sessionID, "error", err)
+			config.Logger.Warn("[auto_delete_sessions] failed", "mode", mode, "session_id", sessionID, "error", err)
 			return
 		}
-		config.Logger.Debug("[auto_delete_sessions] success", "account", a.AccountID, "mode", mode, "session_id", sessionID)
+		config.Logger.Debug("[auto_delete_sessions] success", "mode", mode, "session_id", sessionID)
 	case "all":
-		if err := h.Backend.DeleteAllSessionsForToken(deleteCtx, a.DeepSeekToken); err != nil {
-			config.Logger.Warn("[auto_delete_sessions] failed", "account", a.AccountID, "mode", mode, "error", err)
+		if err := h.Backend.DeleteAllSessions(deleteCtx); err != nil {
+			config.Logger.Warn("[auto_delete_sessions] failed", "mode", mode, "error", err)
 			return
 		}
-		config.Logger.Debug("[auto_delete_sessions] success", "account", a.AccountID, "mode", mode)
+		config.Logger.Debug("[auto_delete_sessions] success", "mode", mode)
 	default:
-		config.Logger.Warn("[auto_delete_sessions] unknown mode", "account", a.AccountID, "mode", mode)
+		config.Logger.Warn("[auto_delete_sessions] unknown mode", "mode", mode)
 	}
 }
 

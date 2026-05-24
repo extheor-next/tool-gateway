@@ -28,22 +28,6 @@ func (h *Handler) getConfig(w http.ResponseWriter, _ *http.Request) {
 			"team_id":       snap.Vercel.TeamID,
 		},
 	}
-	accounts := make([]map[string]any, 0, len(snap.Accounts))
-	for _, acc := range snap.Accounts {
-		token := strings.TrimSpace(acc.Token)
-		accounts = append(accounts, map[string]any{
-			"identifier":    acc.Identifier(),
-			"name":          acc.Name,
-			"remark":        acc.Remark,
-			"email":         acc.Email,
-			"mobile":        acc.Mobile,
-			"proxy_id":      acc.ProxyID,
-			"has_password":  strings.TrimSpace(acc.Password) != "",
-			"has_token":     token != "",
-			"token_preview": maskSecretPreview(token),
-		})
-	}
-	safe["accounts"] = accounts
 	proxies := make([]map[string]any, 0, len(snap.Proxies))
 	for _, proxy := range snap.Proxies {
 		proxy = config.NormalizeProxy(proxy)

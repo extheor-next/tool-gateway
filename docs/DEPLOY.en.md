@@ -423,7 +423,7 @@ TOOL_GATEWAY_CHAT_HISTORY_PATH=/tmp/chat_history.json
 
 ```bash
 # Clone
-git clone https://github.com/CJackHwang/tool-gateway.git
+git clone https://github.com/extheor-next/tool-gateway.git
 cd tool-gateway
 
 # Copy and edit config

@@ -7,17 +7,15 @@ import (
 	"encoding/json"
 	"net/http"
 
-	"tool-gateway/internal/auth"
 	"tool-gateway/internal/config"
 	trans "tool-gateway/internal/deepseek/transport"
 )
 
-func (c *Client) CallCompletion(ctx context.Context, a *auth.RequestAuth, payload map[string]any, powResp string, maxAttempts int) (*http.Response, error) {
-	_ = maxAttempts
-	clients := c.requestClientsForAuth(ctx, a)
-	headers := c.authHeaders(a.DeepSeekToken)
+func (c *Client) CallCompletion(ctx context.Context, payload map[string]any, powResp string) (*http.Response, error) {
+	clients := c.requestClients()
+	headers := c.authHeaders()
 	headers["x-ds-pow-response"] = powResp
-	captureSession := c.capture.Start("deepseek_completion", dsprotocol.DeepSeekCompletionURL, a.AccountID, payload)
+	captureSession := c.capture.Start("deepseek_completion", dsprotocol.DeepSeekCompletionURL, "", payload)
 	resp, err := c.streamPostOnce(ctx, clients.stream, dsprotocol.DeepSeekCompletionURL, headers, payload)
 	if err != nil {
 		return nil, err
@@ -26,7 +24,7 @@ func (c *Client) CallCompletion(ctx context.Context, a *auth.RequestAuth, payloa
 		resp.Body = captureSession.WrapBody(resp.Body, resp.StatusCode)
 	}
 	if resp.StatusCode == http.StatusOK {
-		resp = c.wrapCompletionWithAutoContinue(ctx, a, payload, powResp, resp)
+		resp = c.wrapCompletionWithAutoContinue(ctx, payload, powResp, resp)
 	}
 	return resp, nil
 }
@@ -45,7 +43,7 @@ func (c *Client) streamPostWithFallback(ctx context.Context, doer trans.Doer, ur
 		return nil, err
 	}
 	headers = c.jsonHeaders(headers)
-	clients := c.requestClientsFromContext(ctx)
+	clients := c.requestClients()
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(b))
 	if err != nil {
 		return nil, err

@@ -17,14 +17,6 @@ func TestValidateConfigRejectsInvalidValues(t *testing.T) {
 			want: "admin.jwt_expire_hours",
 		},
 		{
-			name: "runtime relation",
-			cfg: Config{Runtime: RuntimeConfig{
-				AccountMaxInflight: 8,
-				GlobalMaxInflight:  4,
-			}},
-			want: "runtime.global_max_inflight must be >= runtime.account_max_inflight",
-		},
-		{
 			name: "responses",
 			cfg:  Config{Responses: ResponsesConfig{StoreTTLSeconds: 10}},
 			want: "responses.store_ttl_seconds",

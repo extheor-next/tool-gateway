@@ -14,7 +14,6 @@ import (
 	"strconv"
 	"strings"
 
-	"tool-gateway/internal/auth"
 	"tool-gateway/internal/config"
 	trans "tool-gateway/internal/deepseek/transport"
 )
@@ -33,13 +32,13 @@ type UploadFileResult struct {
 	Bytes      int64
 	Status     string
 	Purpose    string
-	AccountID  string
+	CallerID   string
 	IsImage    bool
 	Raw        map[string]any
 	RawHeaders http.Header
 }
 
-func (c *Client) UploadFile(ctx context.Context, a *auth.RequestAuth, req UploadFileRequest, maxAttempts int) (*UploadFileResult, error) {
+func (c *Client) UploadFile(ctx context.Context, req UploadFileRequest, maxAttempts int) (*UploadFileResult, error) {
 	if maxAttempts <= 0 {
 		maxAttempts = c.maxRetries
 	}
@@ -69,22 +68,17 @@ func (c *Client) UploadFile(ctx context.Context, a *auth.RequestAuth, req Upload
 	if modelType != "" {
 		capturePayload["model_type"] = modelType
 	}
-	captureSession := c.capture.Start("deepseek_upload_file", dsprotocol.DeepSeekUploadFileURL, a.AccountID, capturePayload)
+	captureSession := c.capture.Start("deepseek_upload_file", dsprotocol.DeepSeekUploadFileURL, "", capturePayload)
 	attempts := 0
-	refreshed := false
 	powHeader := ""
-	lastFailureKind := FailureUnknown
-	lastFailureMessage := ""
 	for attempts < maxAttempts {
-		clients := c.requestClientsForAuth(ctx, a)
 		if strings.TrimSpace(powHeader) == "" {
-			powHeader, err = c.GetPowForTarget(ctx, a, dsprotocol.DeepSeekUploadTargetPath, maxAttempts)
+			powHeader, err = c.GetPowForTarget(ctx, dsprotocol.DeepSeekUploadTargetPath, maxAttempts)
 			if err != nil {
 				return nil, err
 			}
-			clients = c.requestClientsForAuth(ctx, a)
 		}
-		headers := c.authHeaders(a.DeepSeekToken)
+		headers := c.authHeaders()
 		headers["Content-Type"] = contentTypeHeader
 		if modelType != "" {
 			headers["x-model-type"] = modelType
@@ -92,9 +86,10 @@ func (c *Client) UploadFile(ctx context.Context, a *auth.RequestAuth, req Upload
 		headers["x-ds-pow-response"] = powHeader
 		headers["x-file-size"] = strconv.Itoa(len(req.Data))
 		headers["x-thinking-enabled"] = "1"
+		clients := c.requestClients()
 		resp, err := c.doUpload(ctx, clients.regular, clients.fallback, dsprotocol.DeepSeekUploadFileURL, headers, body)
 		if err != nil {
-			config.Logger.Warn("[upload_file] request error", "error", err, "account", a.AccountID, "filename", filename)
+			config.Logger.Warn("[upload_file] request error", "error", err, "filename", filename)
 			return nil, err
 		}
 		if captureSession != nil {
@@ -127,43 +122,17 @@ func (c *Client) UploadFile(ctx context.Context, a *auth.RequestAuth, req Upload
 			if result.Purpose == "" {
 				result.Purpose = purpose
 			}
-			if result.AccountID == "" {
-				result.AccountID = a.AccountID
-			}
 			if result.ID == "" {
 				return nil, errors.New("upload file succeeded without file id")
 			}
-			if err := c.waitForUploadedFile(ctx, a, result); err != nil {
+			if err := c.waitForUploadedFile(ctx, result); err != nil {
 				return nil, err
 			}
 			return result, nil
 		}
-		config.Logger.Warn("[upload_file] failed", "status", resp.StatusCode, "code", code, "biz_code", bizCode, "msg", msg, "biz_msg", bizMsg, "account", a.AccountID, "filename", filename)
+		config.Logger.Warn("[upload_file] failed", "status", resp.StatusCode, "code", code, "biz_code", bizCode, "msg", msg, "biz_msg", bizMsg, "filename", filename)
 		powHeader = ""
-		lastFailureMessage = failureMessage(msg, bizMsg, "upload file failed")
-		if isTokenInvalid(resp.StatusCode, code, bizCode, msg, bizMsg) || isAuthIndicativeBizFailure(msg, bizMsg) {
-			lastFailureKind = authFailureKind(a.UseConfigToken)
-		} else {
-			lastFailureKind = FailureUnknown
-		}
-		if a.UseConfigToken {
-			if !refreshed && shouldAttemptRefresh(resp.StatusCode, code, bizCode, msg, bizMsg) {
-				if c.Auth.RefreshToken(ctx, a) {
-					refreshed = true
-					attempts++
-					continue
-				}
-			}
-			if c.Auth.SwitchAccount(ctx, a) {
-				refreshed = false
-				attempts++
-				continue
-			}
-		}
 		attempts++
-	}
-	if lastFailureKind != FailureUnknown {
-		return nil, &RequestFailure{Op: "upload file", Kind: lastFailureKind, Message: lastFailureMessage}
 	}
 	return nil, errors.New("upload file failed")
 }
@@ -248,8 +217,8 @@ func extractUploadFileResult(resp map[string]any) *UploadFileResult {
 		if result.Purpose == "" {
 			result.Purpose = firstNonEmptyString(m, "purpose")
 		}
-		if result.AccountID == "" {
-			result.AccountID = firstNonEmptyString(m, "account_id", "accountId", "owner_account_id", "ownerAccountId")
+		if result.CallerID == "" {
+			result.CallerID = firstNonEmptyString(m, "caller_id", "callerId", "owner_caller_id", "ownerCallerId")
 		}
 		if result.Bytes == 0 {
 			result.Bytes = firstPositiveInt64(m, "bytes", "size", "file_size")

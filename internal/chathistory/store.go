@@ -42,7 +42,6 @@ type Entry struct {
 	CompletedAt      int64          `json:"completed_at,omitempty"`
 	Status           string         `json:"status"`
 	CallerID         string         `json:"caller_id,omitempty"`
-	AccountID        string         `json:"account_id,omitempty"`
 	Surface          string         `json:"surface,omitempty"`
 	Model            string         `json:"model,omitempty"`
 	Stream           bool           `json:"stream"`
@@ -72,7 +71,6 @@ type SummaryEntry struct {
 	CompletedAt    int64  `json:"completed_at,omitempty"`
 	Status         string `json:"status"`
 	CallerID       string `json:"caller_id,omitempty"`
-	AccountID      string `json:"account_id,omitempty"`
 	Surface        string `json:"surface,omitempty"`
 	Model          string `json:"model,omitempty"`
 	Stream         bool   `json:"stream"`
@@ -93,7 +91,6 @@ type File struct {
 
 type StartParams struct {
 	CallerID    string
-	AccountID   string
 	Surface     string
 	Model       string
 	Stream      bool
@@ -273,7 +270,6 @@ func (s *Store) Start(params StartParams) (Entry, error) {
 		UpdatedAt:   now,
 		Status:      "streaming",
 		CallerID:    strings.TrimSpace(params.CallerID),
-		AccountID:   strings.TrimSpace(params.AccountID),
 		Surface:     strings.TrimSpace(params.Surface),
 		Model:       strings.TrimSpace(params.Model),
 		Stream:      params.Stream,
@@ -599,7 +595,6 @@ func summaryFromEntry(item Entry) SummaryEntry {
 		CompletedAt:    item.CompletedAt,
 		Status:         item.Status,
 		CallerID:       item.CallerID,
-		AccountID:      item.AccountID,
 		Surface:        item.Surface,
 		Model:          item.Model,
 		Stream:         item.Stream,

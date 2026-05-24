@@ -8,7 +8,6 @@ import (
 
 type Handler struct {
 	Store       adminshared.ConfigStore
-	Pool        adminshared.PoolController
 	Backend     adminshared.CompletionBackend
 	OpenAI      adminshared.OpenAIChatCaller
 	ChatHistory *chathistory.Store
@@ -18,9 +17,6 @@ var writeJSON = adminshared.WriteJSON
 
 func fieldString(m map[string]any, key string) string {
 	return adminshared.FieldString(m, key)
-}
-func accountMatchesIdentifier(acc config.Account, identifier string) bool {
-	return adminshared.AccountMatchesIdentifier(acc, identifier)
 }
 func toProxy(m map[string]any) config.Proxy { return adminshared.ToProxy(m) }
 func findProxyByID(c config.Config, proxyID string) (config.Proxy, bool) {

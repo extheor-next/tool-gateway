@@ -12,7 +12,6 @@ import (
 	"github.com/google/uuid"
 
 	"tool-gateway/internal/assistantturn"
-	"tool-gateway/internal/auth"
 	"tool-gateway/internal/completionruntime"
 	"tool-gateway/internal/config"
 	dsprotocol "tool-gateway/internal/deepseek/protocol"
@@ -24,7 +23,7 @@ import (
 )
 
 func (h *Handler) GetResponseByID(w http.ResponseWriter, r *http.Request) {
-	a, err := h.Auth.DetermineCaller(r)
+	_, err := h.Auth.DetermineCaller(r)
 	if err != nil {
 		writeOpenAIError(w, http.StatusUnauthorized, err.Error())
 		return
@@ -35,7 +34,7 @@ func (h *Handler) GetResponseByID(w http.ResponseWriter, r *http.Request) {
 		writeOpenAIError(w, http.StatusBadRequest, "response_id is required.")
 		return
 	}
-	owner := responseStoreOwner(a)
+	owner := "default"
 	if owner == "" {
 		writeOpenAIError(w, http.StatusUnauthorized, "unauthorized")
 		return
@@ -50,25 +49,13 @@ func (h *Handler) GetResponseByID(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) Responses(w http.ResponseWriter, r *http.Request) {
-	a, err := h.Auth.Determine(r)
+	_, err := h.Auth.Determine(r)
 	if err != nil {
-		status := http.StatusUnauthorized
-		detail := err.Error()
-		if err == auth.ErrNoAccount {
-			status = http.StatusTooManyRequests
-		}
-		writeOpenAIError(w, status, detail)
+		writeOpenAIError(w, http.StatusUnauthorized, err.Error())
 		return
 	}
-	defer h.Auth.Release(a)
-	r = r.WithContext(auth.WithAuth(r.Context(), a))
-	owner := responseStoreOwner(a)
-	if owner == "" {
-		writeOpenAIError(w, http.StatusUnauthorized, "unauthorized")
-		return
-	}
-
 	r.Body = http.MaxBytesReader(w, r.Body, openAIGeneralMaxSize)
+owner := "default"
 	var req map[string]any
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		if strings.Contains(strings.ToLower(err.Error()), "too large") {
@@ -78,7 +65,7 @@ func (h *Handler) Responses(w http.ResponseWriter, r *http.Request) {
 		writeOpenAIError(w, http.StatusBadRequest, "invalid json")
 		return
 	}
-	if err := h.preprocessInlineFileInputs(r.Context(), a, req); err != nil {
+	if err := h.preprocessInlineFileInputs(r.Context(), req); err != nil {
 		writeOpenAIInlineFileError(w, err)
 		return
 	}
@@ -88,7 +75,7 @@ func (h *Handler) Responses(w http.ResponseWriter, r *http.Request) {
 		writeOpenAIError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	stdReq, err = h.applyCurrentInputFile(r.Context(), a, stdReq)
+	stdReq, err = h.applyCurrentInputFile(r.Context(), stdReq)
 	if err != nil {
 		status, message := mapCurrentInputFileError(err)
 		writeOpenAIError(w, status, message)
@@ -99,12 +86,11 @@ func (h *Handler) Responses(w http.ResponseWriter, r *http.Request) {
 	historySession := responsehistory.Start(responsehistory.StartParams{
 		Store:    h.ChatHistory,
 		Request:  r,
-		Auth:     a,
 		Surface:  "openai.responses",
 		Standard: stdReq,
 	})
 	if !stdReq.Stream {
-		result, outErr := completionruntime.ExecuteNonStreamWithRetry(r.Context(), h.Backend, a, stdReq, completionruntime.Options{
+		result, outErr := completionruntime.ExecuteNonStreamWithRetry(r.Context(), h.Backend, stdReq, completionruntime.Options{
 			RetryEnabled:     true,
 			CurrentInputFile: h.Store,
 		})
@@ -125,7 +111,7 @@ func (h *Handler) Responses(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	start, outErr := completionruntime.StartCompletion(r.Context(), h.Backend, a, stdReq, completionruntime.Options{
+	start, outErr := completionruntime.StartCompletion(r.Context(), h.Backend, stdReq, completionruntime.Options{
 		CurrentInputFile: h.Store,
 	})
 	if outErr != nil {
@@ -138,7 +124,7 @@ func (h *Handler) Responses(w http.ResponseWriter, r *http.Request) {
 
 	streamReq := start.Request
 	refFileTokens := streamReq.RefFileTokens
-	h.handleResponsesStreamWithRetry(w, r, a, start.Response, start.Payload, start.Pow, owner, responseID, streamReq, streamReq.ResponseModel, streamReq.PromptTokenText, refFileTokens, streamReq.Thinking, streamReq.Search, streamReq.ToolNames, streamReq.ToolsRaw, streamReq.ToolChoice, traceID, historySession)
+	h.handleResponsesStreamWithRetry(w, r, start.Response, start.Payload, start.Pow, "", responseID, streamReq, streamReq.ResponseModel, streamReq.PromptTokenText, refFileTokens, streamReq.Thinking, streamReq.Search, streamReq.ToolNames, streamReq.ToolsRaw, streamReq.ToolChoice, traceID, historySession)
 }
 
 func (h *Handler) handleResponsesNonStream(w http.ResponseWriter, resp *http.Response, owner, responseID, model, finalPrompt string, refFileTokens int, thinkingEnabled, searchEnabled bool, toolNames []string, toolsRaw any, toolChoice promptcompat.ToolChoicePolicy, traceID string) {

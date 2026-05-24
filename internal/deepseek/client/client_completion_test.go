@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"testing"
 
-	"tool-gateway/internal/auth"
 )
 
 func TestCallCompletionDoesNotFallbackForNonIdempotentCompletion(t *testing.T) {
@@ -20,12 +19,11 @@ func TestCallCompletionDoesNotFallbackForNonIdempotentCompletion(t *testing.T) {
 			return &http.Response{StatusCode: http.StatusOK}, nil
 		})},
 	}
+	client.deepseekKey = "token"
 	_, err := client.CallCompletion(
 		context.Background(),
-		&auth.RequestAuth{DeepSeekToken: "token"},
 		map[string]any{"prompt": "hello"},
 		"pow",
-		3,
 	)
 	if err == nil {
 		t.Fatal("expected completion error")

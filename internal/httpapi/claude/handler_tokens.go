@@ -6,12 +6,11 @@ import (
 )
 
 func (h *Handler) CountTokens(w http.ResponseWriter, r *http.Request) {
-	a, err := h.Auth.Determine(r)
+	_, err := h.Auth.Determine(r)
 	if err != nil {
 		writeClaudeError(w, http.StatusUnauthorized, err.Error())
 		return
 	}
-	defer h.Auth.Release(a)
 
 	var req map[string]any
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {

@@ -14,7 +14,6 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 
-	"tool-gateway/internal/account"
 	"tool-gateway/internal/auth"
 	"tool-gateway/internal/chathistory"
 	"tool-gateway/internal/config"
@@ -34,7 +33,6 @@ import (
 
 type App struct {
 	Store    *config.Store
-	Pool     *account.Pool
 	Resolver *auth.Resolver
 	Backend  *llm.OpenAIAdapter
 	Router   http.Handler
@@ -45,22 +43,21 @@ func NewApp() (*App, error) {
 	if err != nil {
 		return nil, fmt.Errorf("load config: %w", err)
 	}
-	pool := account.NewPool(store)
 	backend := llm.NewOpenAIAdapter(store)
-	resolver := auth.NewResolver(store, pool, backend.Login)
+	resolver := auth.NewResolver(store)
 	chatHistoryStore := chathistory.New(config.ChatHistoryPath())
 	if err := chatHistoryStore.Err(); err != nil {
 		config.Logger.Warn("[chat_history] unavailable", "path", chatHistoryStore.Path(), "error", err)
 	}
 
-	modelsHandler := &shared.ModelsHandler{Store: store}
+	modelsHandler := &shared.ModelsHandler{Store: store, ExtStore: store, HTTPClient: &http.Client{Timeout: 30 * time.Second}}
 	chatHandler := &chat.Handler{Store: store, Auth: resolver, Backend: backend, ChatHistory: chatHistoryStore}
 	responsesHandler := &responses.Handler{Store: store, Auth: resolver, Backend: backend, ChatHistory: chatHistoryStore}
 	filesHandler := &files.Handler{Store: store, Auth: resolver, Backend: backend, ChatHistory: chatHistoryStore}
 	embeddingsHandler := &embeddings.Handler{Store: store, Auth: resolver, Backend: backend, ChatHistory: chatHistoryStore}
 	claudeHandler := &claude.Handler{Store: store, Auth: resolver, Backend: backend, OpenAI: chatHandler, ChatHistory: chatHistoryStore}
 	geminiHandler := &gemini.Handler{Store: store, Auth: resolver, Backend: backend, OpenAI: chatHandler, ChatHistory: chatHistoryStore}
-	adminHandler := &admin.Handler{Store: store, Pool: pool, Backend: backend, OpenAI: chatHandler, ChatHistory: chatHistoryStore}
+	adminHandler := &admin.Handler{Store: store, Backend: backend, OpenAI: chatHandler, ChatHistory: chatHistoryStore}
 	ollamaHandler := &ollama.Handler{Store: store}
 	webuiHandler := webui.NewHandler()
 
@@ -118,7 +115,7 @@ func NewApp() (*App, error) {
 		http.NotFound(w, req)
 	})
 
-	return &App{Store: store, Pool: pool, Resolver: resolver, Backend: backend, Router: r}, nil
+	return &App{Store: store, Resolver: resolver, Backend: backend, Router: r}, nil
 }
 
 func timeout(d time.Duration) func(http.Handler) http.Handler {

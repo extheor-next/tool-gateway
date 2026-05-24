@@ -59,12 +59,10 @@ export default function AccountsTable({
                                         </span>
                                     )}
                                 </div>
-                                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-6 gap-2 text-xs text-muted-foreground">
+                                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-2 text-xs text-muted-foreground">
                                     <div className="truncate"><span className="font-medium text-foreground/70">URL:</span> {provider.base_url || '-'}</div>
                                     <div className="truncate"><span className="font-medium text-foreground/70">{t('providerManager.modelLabel')}:</span> {provider.model || '-'}</div>
                                     <div><span className="font-medium text-foreground/70">{t('providerManager.modeLabel')}:</span> {modeLabel(t, provider.mode)}</div>
-                                    <div><span className="font-medium text-foreground/70">{t('providerManager.maxInflightShort')}:</span> {provider.max_inflight || t('providerManager.unlimited')}</div>
-                                    <div><span className="font-medium text-foreground/70">{t('providerManager.maxQueueShort')}:</span> {provider.max_queue || 0}</div>
                                     <div><span className="font-medium text-foreground/70">{t('providerManager.apiKeyLabel')}:</span> {provider.api_key_preview || (provider.api_key ? maskSecret(provider.api_key) : '-')}</div>
                                 </div>
                             </div>

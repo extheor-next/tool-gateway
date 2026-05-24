@@ -37,7 +37,6 @@ func TestGetChatHistoryAndUpdateSettings(t *testing.T) {
 	h, historyStore := newChatHistoryAdminHarness(t)
 	entry, err := historyStore.Start(chathistory.StartParams{
 		CallerID:  "caller:test",
-		AccountID: "user@example.com",
 		Model:     "deepseek-v4-flash",
 		UserInput: "hello",
 	})

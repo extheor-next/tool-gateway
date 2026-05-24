@@ -24,7 +24,7 @@ func validateProxyMutation(cfg *config.Config) error {
 	if err := config.ValidateProxyConfig(cfg.Proxies); err != nil {
 		return err
 	}
-	return config.ValidateAccountProxyReferences(cfg.Accounts, cfg.Proxies)
+	return config.ValidateProxyConfig(cfg.Proxies)
 }
 
 func proxyResponse(proxy config.Proxy) map[string]any {
@@ -126,11 +126,6 @@ func (h *Handler) deleteProxy(w http.ResponseWriter, r *http.Request) {
 			return newRequestError("代理不存在")
 		}
 		c.Proxies = append(c.Proxies[:idx], c.Proxies[idx+1:]...)
-		for i := range c.Accounts {
-			if strings.TrimSpace(c.Accounts[i].ProxyID) == strings.TrimSpace(proxyID) {
-				c.Accounts[i].ProxyID = ""
-			}
-		}
 		return validateProxyMutation(c)
 	})
 	if err != nil {
@@ -163,40 +158,4 @@ func (h *Handler) testProxy(w http.ResponseWriter, r *http.Request) {
 
 	result := proxyConnectivityTester(r.Context(), proxy)
 	writeJSON(w, http.StatusOK, result)
-}
-
-func (h *Handler) updateAccountProxy(w http.ResponseWriter, r *http.Request) {
-	identifier := chi.URLParam(r, "identifier")
-	if decoded, err := url.PathUnescape(identifier); err == nil {
-		identifier = decoded
-	}
-	var req map[string]any
-	_ = json.NewDecoder(r.Body).Decode(&req)
-	proxyID := fieldString(req, "proxy_id")
-
-	err := h.Store.Update(func(c *config.Config) error {
-		if proxyID != "" {
-			if _, ok := findProxyByID(*c, proxyID); !ok {
-				return newRequestError("代理不存在")
-			}
-		}
-		for i, acc := range c.Accounts {
-			if !accountMatchesIdentifier(acc, identifier) {
-				continue
-			}
-			c.Accounts[i].ProxyID = proxyID
-			return validateProxyMutation(c)
-		}
-		return newRequestError("账号不存在")
-	})
-	if err != nil {
-		if detail, ok := requestErrorDetail(err); ok {
-			writeJSON(w, http.StatusBadRequest, map[string]any{"detail": detail})
-			return
-		}
-		writeJSON(w, http.StatusBadRequest, map[string]any{"detail": err.Error()})
-		return
-	}
-	h.Pool.Reset()
-	writeJSON(w, http.StatusOK, map[string]any{"success": true, "proxy_id": proxyID})
 }

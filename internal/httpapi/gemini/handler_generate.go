@@ -78,7 +78,6 @@ func (h *Handler) handleGeminiDirect(w http.ResponseWriter, r *http.Request, str
 		writeGeminiError(w, http.StatusUnauthorized, err.Error())
 		return true
 	}
-	defer h.Auth.Release(a)
 	stdReq, err = h.applyCurrentInputFile(r.Context(), a, stdReq)
 	if err != nil {
 		status, message := mapCurrentInputFileError(err)
@@ -88,15 +87,14 @@ func (h *Handler) handleGeminiDirect(w http.ResponseWriter, r *http.Request, str
 	historySession := responsehistory.Start(responsehistory.StartParams{
 		Store:    h.ChatHistory,
 		Request:  r,
-		Auth:     a,
 		Surface:  "gemini.generate_content",
 		Standard: stdReq,
 	})
 	if stream {
-		h.handleGeminiDirectStream(w, r, a, stdReq, historySession)
+		h.handleGeminiDirectStream(w, r, stdReq, historySession)
 		return true
 	}
-	result, outErr := completionruntime.ExecuteNonStreamWithRetry(r.Context(), h.Backend, a, stdReq, completionruntime.Options{
+	result, outErr := completionruntime.ExecuteNonStreamWithRetry(r.Context(), h.Backend, stdReq, completionruntime.Options{
 		RetryEnabled:     true,
 		CurrentInputFile: h.Store,
 	})
@@ -118,15 +116,15 @@ func (h *Handler) applyCurrentInputFile(ctx context.Context, a *auth.RequestAuth
 	if h == nil {
 		return stdReq, nil
 	}
-	return (history.Service{Store: h.Store, Backend: h.Backend}).ApplyCurrentInputFile(ctx, a, stdReq)
+	return (history.Service{Store: h.Store, Backend: h.Backend}).ApplyCurrentInputFile(ctx, stdReq)
 }
 
 func mapCurrentInputFileError(err error) (int, string) {
 	return history.MapError(err)
 }
 
-func (h *Handler) handleGeminiDirectStream(w http.ResponseWriter, r *http.Request, a *auth.RequestAuth, stdReq promptcompat.StandardRequest, historySession *responsehistory.Session) {
-	start, outErr := completionruntime.StartCompletion(r.Context(), h.Backend, a, stdReq, completionruntime.Options{
+func (h *Handler) handleGeminiDirectStream(w http.ResponseWriter, r *http.Request, stdReq promptcompat.StandardRequest, historySession *responsehistory.Session) {
+	start, outErr := completionruntime.StartCompletion(r.Context(), h.Backend, stdReq, completionruntime.Options{
 		CurrentInputFile: h.Store,
 	})
 	if outErr != nil {
@@ -137,7 +135,7 @@ func (h *Handler) handleGeminiDirectStream(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	streamReq := start.Request
-	h.handleStreamGenerateContentWithRetry(w, r, a, start.Response, start.Payload, start.Pow, streamReq, streamReq.ResponseModel, streamReq.PromptTokenText, streamReq.Thinking, streamReq.Search, streamReq.ToolNames, streamReq.ToolsRaw, historySession)
+	h.handleStreamGenerateContentWithRetry(w, r, start.Response, start.Payload, start.Pow, streamReq, streamReq.ResponseModel, streamReq.PromptTokenText, streamReq.Thinking, streamReq.Search, streamReq.ToolNames, streamReq.ToolsRaw, historySession)
 }
 
 func (h *Handler) proxyViaOpenAI(w http.ResponseWriter, r *http.Request, stream bool) bool {

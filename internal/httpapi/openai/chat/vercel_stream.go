@@ -11,7 +11,6 @@ import (
 
 	"tool-gateway/internal/auth"
 	"tool-gateway/internal/config"
-	"tool-gateway/internal/httpapi/openai/history"
 	"tool-gateway/internal/promptcompat"
 	"tool-gateway/internal/util"
 
@@ -33,27 +32,17 @@ func (h *Handler) handleVercelStreamPrepare(w http.ResponseWriter, r *http.Reque
 
 	a, err := h.Auth.Determine(r)
 	if err != nil {
-		status := http.StatusUnauthorized
-		if err == auth.ErrNoAccount {
-			status = http.StatusTooManyRequests
-		}
-		writeOpenAIError(w, status, err.Error())
+		writeOpenAIError(w, http.StatusUnauthorized, "Invalid token.")
 		return
 	}
-	leased := false
-	defer func() {
-		if !leased {
-			h.Auth.Release(a)
-		}
-	}()
-	r = r.WithContext(auth.WithAuth(r.Context(), a))
+	_ = a
 
 	var req map[string]any
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeOpenAIError(w, http.StatusBadRequest, "invalid json")
 		return
 	}
-	if err := h.preprocessInlineFileInputs(r.Context(), a, req); err != nil {
+	if err := h.preprocessInlineFileInputs(r.Context(), req); err != nil {
 		writeOpenAIInlineFileError(w, err)
 		return
 	}
@@ -70,29 +59,21 @@ func (h *Handler) handleVercelStreamPrepare(w http.ResponseWriter, r *http.Reque
 		writeOpenAIError(w, http.StatusBadRequest, "stream must be true")
 		return
 	}
-	stdReq, err = h.applyCurrentInputFile(r.Context(), a, stdReq)
+	stdReq, err = h.applyCurrentInputFile(r.Context(), stdReq)
 	if err != nil {
 		status, message := mapCurrentInputFileError(err)
 		writeOpenAIError(w, status, message)
 		return
 	}
 
-	sessionID, err := h.Backend.CreateSession(r.Context(), a, 3)
+	sessionID, err := h.Backend.CreateSession(r.Context(), 3)
 	if err != nil {
-		if a.UseConfigToken {
-			writeOpenAIError(w, http.StatusUnauthorized, "Account token is invalid. Please re-login the account in admin.")
-		} else {
-			writeOpenAIError(w, http.StatusUnauthorized, "Invalid token. If this should be a Tool Gateway key, add it to config.keys first.")
-		}
+		writeOpenAIError(w, http.StatusUnauthorized, "Invalid token.")
 		return
 	}
-	powHeader, err := h.Backend.GetPow(r.Context(), a, 3)
+	powHeader, err := h.Backend.GetPow(r.Context(), 3)
 	if err != nil {
 		writeOpenAIError(w, http.StatusUnauthorized, "Failed to get PoW (invalid token or unknown error).")
-		return
-	}
-	if strings.TrimSpace(a.DeepSeekToken) == "" {
-		writeOpenAIError(w, http.StatusUnauthorized, "Invalid token. If this should be a Tool Gateway key, add it to config.keys first.")
 		return
 	}
 
@@ -102,7 +83,6 @@ func (h *Handler) handleVercelStreamPrepare(w http.ResponseWriter, r *http.Reque
 		writeOpenAIError(w, http.StatusInternalServerError, "failed to create stream lease")
 		return
 	}
-	leased = true
 	writeJSON(w, http.StatusOK, map[string]any{
 		"session_id":       sessionID,
 		"lease_id":         leaseID,
@@ -111,7 +91,7 @@ func (h *Handler) handleVercelStreamPrepare(w http.ResponseWriter, r *http.Reque
 		"thinking_enabled": stdReq.Thinking,
 		"search_enabled":   stdReq.Search,
 		"tool_names":       stdReq.ToolNames,
-		"deepseek_token":   a.DeepSeekToken,
+		"deepseek_token":   "",
 		"pow_header":       powHeader,
 		"payload":          payload,
 	})
@@ -146,12 +126,7 @@ func (h *Handler) handleVercelStreamRelease(w http.ResponseWriter, r *http.Reque
 		writeOpenAIError(w, http.StatusNotFound, "stream lease not found")
 		return
 	}
-	if h.Auth != nil && lease.Auth != nil {
-		defer h.Auth.Release(lease.Auth)
-	}
-	if lease.Auth != nil {
-		h.autoDeleteRemoteSession(r.Context(), lease.Auth, lease.SessionID)
-	}
+	h.autoDeleteRemoteSession(r.Context(), lease.SessionID)
 	writeJSON(w, http.StatusOK, map[string]any{"success": true})
 }
 
@@ -183,7 +158,7 @@ func (h *Handler) handleVercelStreamPow(w http.ResponseWriter, r *http.Request) 
 		writeOpenAIError(w, http.StatusNotFound, "stream lease not found or expired")
 		return
 	}
-	powHeader, err := h.Backend.GetPow(r.Context(), leaseAuth, 3)
+	powHeader, err := h.Backend.GetPow(r.Context(), 3)
 	if err != nil {
 		writeOpenAIError(w, http.StatusInternalServerError, "Failed to get PoW.")
 		return
@@ -222,49 +197,9 @@ func (h *Handler) handleVercelStreamSwitch(w http.ResponseWriter, r *http.Reques
 		writeOpenAIError(w, http.StatusNotFound, "stream lease not found or expired")
 		return
 	}
-	a := lease.Auth
-	if !a.UseConfigToken || !a.SwitchAccount(r.Context()) {
-		writeOpenAIErrorWithCode(w, http.StatusTooManyRequests, "Upstream account hit a rate limit and returned reasoning without visible output.", "upstream_empty_output")
-		return
-	}
 
-	stdReq := lease.Standard
-	var err error
-	if stdReq.CurrentInputFileApplied {
-		stdReq, err = (history.Service{Store: h.Store, Backend: h.Backend}).ReuploadAppliedCurrentInputFile(r.Context(), a, stdReq)
-		if err != nil {
-			status, message := mapCurrentInputFileError(err)
-			writeOpenAIError(w, status, message)
-			return
-		}
-	}
-	sessionID, err := h.Backend.CreateSession(r.Context(), a, 3)
-	if err != nil {
-		writeOpenAIError(w, http.StatusUnauthorized, "Account token is invalid. Please re-login the account in admin.")
-		return
-	}
-	powHeader, err := h.Backend.GetPow(r.Context(), a, 3)
-	if err != nil {
-		writeOpenAIError(w, http.StatusUnauthorized, "Failed to get PoW (invalid token or unknown error).")
-		return
-	}
-	if strings.TrimSpace(a.DeepSeekToken) == "" {
-		writeOpenAIError(w, http.StatusUnauthorized, "Account token is invalid. Please re-login the account in admin.")
-		return
-	}
-	h.updateStreamLeaseState(leaseID, stdReq, sessionID)
-	writeJSON(w, http.StatusOK, map[string]any{
-		"session_id":       sessionID,
-		"lease_id":         leaseID,
-		"model":            stdReq.ResponseModel,
-		"final_prompt":     stdReq.FinalPrompt,
-		"thinking_enabled": stdReq.Thinking,
-		"search_enabled":   stdReq.Search,
-		"tool_names":       stdReq.ToolNames,
-		"deepseek_token":   a.DeepSeekToken,
-		"pow_header":       powHeader,
-		"payload":          stdReq.CompletionPayload(sessionID),
-	})
+	writeOpenAIErrorWithCode(w, http.StatusTooManyRequests, "Rate limited. Retry later.", "upstream_empty_output")
+	return
 }
 
 func isVercelStreamPrepareRequest(r *http.Request) bool {
@@ -409,8 +344,7 @@ func (h *Handler) releaseExpiredAuths(expired []*auth.RequestAuth) {
 	if h.Auth == nil || len(expired) == 0 {
 		return
 	}
-	for _, a := range expired {
-		h.Auth.Release(a)
+	for range expired {
 	}
 }
 

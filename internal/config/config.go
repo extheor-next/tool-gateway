@@ -10,7 +10,6 @@ import (
 type Config struct {
 	Keys                []string                  `json:"keys,omitempty"`
 	APIKeys             []APIKey                  `json:"api_keys,omitempty"`
-	Accounts            []Account                 `json:"accounts,omitempty"`
 	Proxies             []Proxy                   `json:"proxies,omitempty"`
 	ModelAliases        map[string]string         `json:"model_aliases,omitempty"`
 	Admin               AdminConfig               `json:"admin,omitempty"`
@@ -26,16 +25,6 @@ type Config struct {
 	VercelSyncHash      string                    `json:"_vercel_sync_hash,omitempty"`
 	VercelSyncTime      int64                     `json:"_vercel_sync_time,omitempty"`
 	AdditionalFields    map[string]any            `json:"-"`
-}
-
-type Account struct {
-	Name     string `json:"name,omitempty"`
-	Remark   string `json:"remark,omitempty"`
-	Email    string `json:"email,omitempty"`
-	Mobile   string `json:"mobile,omitempty"`
-	Password string `json:"password,omitempty"`
-	Token    string `json:"token,omitempty"`
-	ProxyID  string `json:"proxy_id,omitempty"`
 }
 
 type APIKey struct {
@@ -75,15 +64,6 @@ func StableProxyID(p Proxy) string {
 	return "proxy_" + hex.EncodeToString(sum[:6])
 }
 
-func (c *Config) ClearAccountTokens() {
-	if c == nil {
-		return
-	}
-	for i := range c.Accounts {
-		c.Accounts[i].Token = ""
-	}
-}
-
 func (c *Config) NormalizeCredentials() {
 	if c == nil {
 		return
@@ -97,30 +77,8 @@ func (c *Config) NormalizeCredentials() {
 		c.APIKeys = apiKeysFromStrings(c.Keys, nil)
 	}
 
-	for i := range c.Accounts {
-		c.Accounts[i].Name = strings.TrimSpace(c.Accounts[i].Name)
-		c.Accounts[i].Remark = strings.TrimSpace(c.Accounts[i].Remark)
-	}
-
 	c.Vercel = NormalizeVercelConfig(c.Vercel)
 	c.normalizeModelAliases()
-}
-
-// DropInvalidAccounts removes accounts that cannot be addressed by admin APIs
-// (no email and no normalizable mobile). This prevents legacy token-only
-// records from becoming orphaned empty entries after token stripping.
-func (c *Config) DropInvalidAccounts() {
-	if c == nil || len(c.Accounts) == 0 {
-		return
-	}
-	kept := make([]Account, 0, len(c.Accounts))
-	for _, acc := range c.Accounts {
-		if acc.Identifier() == "" {
-			continue
-		}
-		kept = append(kept, acc)
-	}
-	c.Accounts = kept
 }
 
 func (c *Config) normalizeModelAliases() {
@@ -151,8 +109,6 @@ type AdminConfig struct {
 }
 
 type RuntimeConfig struct {
-	AccountMaxInflight        int `json:"account_max_inflight,omitempty"`
-	AccountMaxQueue           int `json:"account_max_queue,omitempty"`
 	GlobalMaxInflight         int `json:"global_max_inflight,omitempty"`
 	TokenRefreshIntervalHours int `json:"token_refresh_interval_hours,omitempty"`
 }

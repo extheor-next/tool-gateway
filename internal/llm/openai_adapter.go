@@ -16,7 +16,6 @@ import (
 	"sync"
 	"time"
 
-	"tool-gateway/internal/auth"
 	"tool-gateway/internal/config"
 	dsclient "tool-gateway/internal/deepseek/client"
 )
@@ -39,38 +38,24 @@ func NewOpenAIAdapter(store *config.Store) *OpenAIAdapter {
 
 func (a *OpenAIAdapter) ExternalAIAdapter() bool { return true }
 
-func (a *OpenAIAdapter) Login(_ context.Context, _ config.Account) (string, error) {
-	return "", errors.New("legacy account login has been removed; configure external_ai or EXTERNAL_AI_* instead")
-}
-
-func (a *OpenAIAdapter) CreateSession(_ context.Context, _ *auth.RequestAuth, _ int) (string, error) {
+func (a *OpenAIAdapter) CreateSession(_ context.Context, _ int) (string, error) {
 	return fmt.Sprintf("chatcmpl-tool-gateway-%d", time.Now().UnixNano()), nil
 }
 
-func (a *OpenAIAdapter) GetPow(_ context.Context, _ *auth.RequestAuth, _ int) (string, error) {
+func (a *OpenAIAdapter) GetPow(_ context.Context, _ int) (string, error) {
 	return "", nil
 }
 
-func (a *OpenAIAdapter) UploadFile(_ context.Context, user *auth.RequestAuth, req dsclient.UploadFileRequest, _ int) (*dsclient.UploadFileResult, error) {
+func (a *OpenAIAdapter) UploadFile(_ context.Context, req dsclient.UploadFileRequest, _ int) (*dsclient.UploadFileResult, error) {
 	if len(req.Data) == 0 {
 		return nil, errors.New("file is required")
 	}
-	// External OpenAI-compatible chat backends generally do not share DeepSeek's
-	// remote file API. Return a stable local file object so generic clients can
-	// still use /files for bookkeeping; current-input-file integration is skipped.
 	id := fmt.Sprintf("file-local-%d", time.Now().UnixNano())
-	accountID := ""
-	if user != nil {
-		accountID = user.AccountID
-		if accountID == "" {
-			accountID = user.CallerID
-		}
-	}
-	return &dsclient.UploadFileResult{ID: id, Filename: req.Filename, Bytes: int64(len(req.Data)), Status: "uploaded", Purpose: req.Purpose, AccountID: accountID}, nil
+	return &dsclient.UploadFileResult{ID: id, Filename: req.Filename, Bytes: int64(len(req.Data)), Status: "uploaded", Purpose: req.Purpose}, nil
 }
 
-func (a *OpenAIAdapter) CallCompletion(ctx context.Context, user *auth.RequestAuth, payload map[string]any, _ string, _ int) (*http.Response, error) {
-	cfg := a.externalConfig(user)
+func (a *OpenAIAdapter) CallCompletion(ctx context.Context, payload map[string]any, _ string) (*http.Response, error) {
+	cfg := a.externalConfig()
 	if strings.TrimSpace(cfg.BaseURL) == "" {
 		return nil, errors.New("external_ai_providers active provider base_url, external_ai.base_url, or EXTERNAL_AI_BASE_URL is required")
 	}
@@ -135,15 +120,11 @@ func (a *OpenAIAdapter) CallCompletion(ctx context.Context, user *auth.RequestAu
 	return convertOpenAIStreamResponse(upstream), nil
 }
 
-func (a *OpenAIAdapter) DeleteSessionForToken(_ context.Context, _ string, _ string) (*dsclient.DeleteSessionResult, error) {
+func (a *OpenAIAdapter) DeleteSession(_ context.Context, _ string, _ int) (*dsclient.DeleteSessionResult, error) {
 	return &dsclient.DeleteSessionResult{Success: true}, nil
 }
 
-func (a *OpenAIAdapter) DeleteAllSessionsForToken(_ context.Context, _ string) error { return nil }
-
-func (a *OpenAIAdapter) GetSessionCountForToken(_ context.Context, _ string) (*dsclient.SessionStats, error) {
-	return &dsclient.SessionStats{Success: true}, nil
-}
+func (a *OpenAIAdapter) DeleteAllSessions(_ context.Context) error { return nil }
 
 type externalAIConfig struct {
 	ProviderID  string
@@ -156,7 +137,7 @@ type externalAIConfig struct {
 	MaxQueue    int
 }
 
-func (a *OpenAIAdapter) externalConfig(user *auth.RequestAuth) externalAIConfig {
+func (a *OpenAIAdapter) externalConfig() externalAIConfig {
 	cfg := externalAIConfig{ProviderID: "external_ai", Headers: map[string]string{}}
 	if a != nil && a.Store != nil {
 		providers := a.Store.ExternalAIProviders()
@@ -195,9 +176,6 @@ func (a *OpenAIAdapter) externalConfig(user *auth.RequestAuth) externalAIConfig 
 		if cfg.APIKey != "" && cfg.ProviderID == "external_ai" && cfg.BaseURL != "" {
 			cfg.ProviderID = "env_external_ai"
 		}
-	}
-	if cfg.APIKey == "" && user != nil && !user.UseConfigToken {
-		cfg.APIKey = strings.TrimSpace(user.DeepSeekToken)
 	}
 	if cfg.Model == "" {
 		cfg.Model = strings.TrimSpace(os.Getenv("EXTERNAL_AI_MODEL"))

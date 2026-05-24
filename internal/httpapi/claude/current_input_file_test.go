@@ -26,9 +26,7 @@ func (claudeHistoryConfig) CurrentInputFileMinChars() int     { return 0 }
 
 func (claudeCurrentInputAuth) Determine(*http.Request) (*auth.RequestAuth, error) {
 	return &auth.RequestAuth{
-		DeepSeekToken: "direct-token",
-		CallerID:      "caller:test",
-		TriedAccounts: map[string]bool{},
+		CallerID: "caller:test",
 	}, nil
 }
 
@@ -76,22 +74,20 @@ func TestClaudeDirectRecordsResponseHistory(t *testing.T) {
 	}
 }
 
-func (claudeCurrentInputAuth) Release(*auth.RequestAuth) {}
-
 type claudeCurrentInputDS struct {
 	uploads []dsclient.UploadFileRequest
 	payload map[string]any
 }
 
-func (d *claudeCurrentInputDS) CreateSession(context.Context, *auth.RequestAuth, int) (string, error) {
+func (d *claudeCurrentInputDS) CreateSession(context.Context, int) (string, error) {
 	return "session-id", nil
 }
 
-func (d *claudeCurrentInputDS) GetPow(context.Context, *auth.RequestAuth, int) (string, error) {
+func (d *claudeCurrentInputDS) GetPow(context.Context, int) (string, error) {
 	return "pow", nil
 }
 
-func (d *claudeCurrentInputDS) UploadFile(_ context.Context, _ *auth.RequestAuth, req dsclient.UploadFileRequest, _ int) (*dsclient.UploadFileResult, error) {
+func (d *claudeCurrentInputDS) UploadFile(_ context.Context, req dsclient.UploadFileRequest, _ int) (*dsclient.UploadFileResult, error) {
 	d.uploads = append(d.uploads, req)
 	id := "file-claude-history"
 	if len(d.uploads) > 1 {
@@ -100,7 +96,7 @@ func (d *claudeCurrentInputDS) UploadFile(_ context.Context, _ *auth.RequestAuth
 	return &dsclient.UploadFileResult{ID: id}, nil
 }
 
-func (d *claudeCurrentInputDS) CallCompletion(_ context.Context, _ *auth.RequestAuth, payload map[string]any, _ string, _ int) (*http.Response, error) {
+func (d *claudeCurrentInputDS) CallCompletion(_ context.Context, payload map[string]any, _ string) (*http.Response, error) {
 	d.payload = payload
 	return &http.Response{
 		StatusCode: http.StatusOK,

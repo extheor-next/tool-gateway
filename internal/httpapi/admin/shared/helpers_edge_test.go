@@ -4,42 +4,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
-
-	"tool-gateway/internal/config"
 )
-
-// ─── reverseAccounts ─────────────────────────────────────────────────
-
-func TestReverseAccountsEmpty(t *testing.T) {
-	a := []config.Account{}
-	reverseAccounts(a)
-	if len(a) != 0 {
-		t.Fatal("expected empty")
-	}
-}
-
-func TestReverseAccountsTwoElements(t *testing.T) {
-	a := []config.Account{
-		{Email: "a@test.com"},
-		{Email: "b@test.com"},
-	}
-	reverseAccounts(a)
-	if a[0].Email != "b@test.com" || a[1].Email != "a@test.com" {
-		t.Fatalf("unexpected order after reverse: %v", a)
-	}
-}
-
-func TestReverseAccountsThreeElements(t *testing.T) {
-	a := []config.Account{
-		{Email: "1@test.com"},
-		{Email: "2@test.com"},
-		{Email: "3@test.com"},
-	}
-	reverseAccounts(a)
-	if a[0].Email != "3@test.com" || a[1].Email != "2@test.com" || a[2].Email != "1@test.com" {
-		t.Fatalf("unexpected order: %v", a)
-	}
-}
 
 // ─── intFromQuery edge cases ─────────────────────────────────────────
 
@@ -167,38 +132,6 @@ func TestToStringSliceTrimsWhitespace(t *testing.T) {
 	}
 	if got[0] != "hello" || got[1] != "world" {
 		t.Fatalf("expected trimmed values, got %#v", got)
-	}
-}
-
-// ─── toAccount edge cases ────────────────────────────────────────────
-
-func TestToAccountAllFields(t *testing.T) {
-	acc := toAccount(map[string]any{
-		"email":    "user@test.com",
-		"mobile":   "13800138000",
-		"password": "secret",
-		"token":    "tok123",
-	})
-	if acc.Email != "user@test.com" {
-		t.Fatalf("unexpected email: %q", acc.Email)
-	}
-	if acc.Mobile != "+8613800138000" {
-		t.Fatalf("unexpected mobile: %q", acc.Mobile)
-	}
-	if acc.Password != "secret" {
-		t.Fatalf("unexpected password: %q", acc.Password)
-	}
-	if acc.Token != "" {
-		t.Fatalf("expected token to be ignored, got %q", acc.Token)
-	}
-}
-
-func TestToAccountNumericValues(t *testing.T) {
-	acc := toAccount(map[string]any{
-		"email": 12345,
-	})
-	if acc.Email != "12345" {
-		t.Fatalf("expected numeric converted to string, got %q", acc.Email)
 	}
 }
 

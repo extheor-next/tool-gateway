@@ -37,14 +37,9 @@ func (m testGeminiAuth) Determine(_ *http.Request) (*auth.RequestAuth, error) {
 		return m.a, nil
 	}
 	return &auth.RequestAuth{
-		UseConfigToken: false,
-		DeepSeekToken:  "direct-token",
-		CallerID:       "caller:test",
-		TriedAccounts:  map[string]bool{},
+		CallerID: "caller:test",
 	}, nil
 }
-
-func (testGeminiAuth) Release(_ *auth.RequestAuth) {}
 
 //nolint:unused // reserved test double for native Gemini backend-call path coverage.
 type testGeminiBackend struct {
@@ -55,17 +50,17 @@ type testGeminiBackend struct {
 }
 
 //nolint:unused // reserved test double for native Gemini backend-call path coverage.
-func (m *testGeminiBackend) CreateSession(_ context.Context, _ *auth.RequestAuth, _ int) (string, error) {
+func (m *testGeminiBackend) CreateSession(_ context.Context, _ int) (string, error) {
 	return "session-id", nil
 }
 
 //nolint:unused // reserved test double for native Gemini backend-call path coverage.
-func (m *testGeminiBackend) GetPow(_ context.Context, _ *auth.RequestAuth, _ int) (string, error) {
+func (m *testGeminiBackend) GetPow(_ context.Context, _ int) (string, error) {
 	return "pow", nil
 }
 
 //nolint:unused // reserved test double for native Gemini backend-call path coverage.
-func (m *testGeminiBackend) UploadFile(_ context.Context, _ *auth.RequestAuth, req dsclient.UploadFileRequest, _ int) (*dsclient.UploadFileResult, error) {
+func (m *testGeminiBackend) UploadFile(_ context.Context, req dsclient.UploadFileRequest, _ int) (*dsclient.UploadFileResult, error) {
 	m.uploadCalls = append(m.uploadCalls, req)
 	id := "file-gemini-history"
 	if len(m.uploadCalls) > 1 {
@@ -75,7 +70,7 @@ func (m *testGeminiBackend) UploadFile(_ context.Context, _ *auth.RequestAuth, r
 }
 
 //nolint:unused // reserved test double for native Gemini backend-call path coverage.
-func (m *testGeminiBackend) CallCompletion(_ context.Context, _ *auth.RequestAuth, payload map[string]any, _ string, _ int) (*http.Response, error) {
+func (m *testGeminiBackend) CallCompletion(_ context.Context, payload map[string]any, _ string) (*http.Response, error) {
 	m.payloads = append(m.payloads, payload)
 	if m.err != nil {
 		return nil, m.err

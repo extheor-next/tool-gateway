@@ -8,7 +8,7 @@ import (
 
 type Handler struct {
 	Store       adminshared.ConfigStore
-	Pool        adminshared.PoolController
+
 	Backend     adminshared.CompletionBackend
 	OpenAI      adminshared.OpenAIChatCaller
 	ChatHistory *chathistory.Store

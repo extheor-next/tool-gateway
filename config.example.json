@@ -1,6 +1,6 @@
 {
   "_comment": "Tool Gateway 配置文件示例 - 复制为 config.json 使用",
-  "_doc": "详细文档: https://github.com/CJackHwang/tool-gateway",
+  "_doc": "详细文档: https://github.com/extheor-next/tool-gateway",
   "keys": [
     "your-api-key-1",
     "your-api-key-2"
@@ -17,7 +17,6 @@
       "remark": "压测或临时调试"
     }
   ],
-  "accounts": [],
   "external_ai": {
     "base_url": "https://api.openai.com/v1",
     "api_key": "sk-your-upstream-key",
@@ -76,10 +75,7 @@
     "jwt_expire_hours": 24
   },
   "runtime": {
-    "account_max_inflight": 2,
-    "account_max_queue": 0,
-    "global_max_inflight": 0,
-    "token_refresh_interval_hours": 6
+    "global_max_inflight": 0
   },
   "auto_delete": {
     "mode": "none"

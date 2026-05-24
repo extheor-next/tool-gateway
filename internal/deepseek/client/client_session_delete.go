@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"net/http"
 
-	"tool-gateway/internal/auth"
 	"tool-gateway/internal/config"
 )
 
@@ -19,11 +18,11 @@ type DeleteSessionResult struct {
 }
 
 // DeleteSession 删除单个会话
-func (c *Client) DeleteSession(ctx context.Context, a *auth.RequestAuth, sessionID string, maxAttempts int) (*DeleteSessionResult, error) {
+func (c *Client) DeleteSession(ctx context.Context, sessionID string, maxAttempts int) (*DeleteSessionResult, error) {
 	if maxAttempts <= 0 {
 		maxAttempts = c.maxRetries
 	}
-	clients := c.requestClientsForAuth(ctx, a)
+	clients := c.requestClients()
 
 	result := &DeleteSessionResult{
 		SessionID: sessionID,
@@ -35,10 +34,9 @@ func (c *Client) DeleteSession(ctx context.Context, a *auth.RequestAuth, session
 	}
 
 	attempts := 0
-	refreshed := false
 
 	for attempts < maxAttempts {
-		headers := c.authHeaders(a.DeepSeekToken)
+		headers := c.authHeaders()
 
 		payload := map[string]any{
 			"chat_session_id": sessionID,
@@ -59,20 +57,6 @@ func (c *Client) DeleteSession(ctx context.Context, a *auth.RequestAuth, session
 
 		result.ErrorMessage = fmt.Sprintf("status=%d, code=%d, msg=%s", status, code, msg)
 		config.Logger.Warn("[delete_session] failed", "status", status, "code", code, "biz_code", bizCode, "msg", msg, "biz_msg", bizMsg, "session_id", sessionID)
-
-		if a.UseConfigToken {
-			if isTokenInvalid(status, code, bizCode, msg, bizMsg) && !refreshed {
-				if c.Auth.RefreshToken(ctx, a) {
-					refreshed = true
-					continue
-				}
-			}
-			if c.Auth.SwitchAccount(ctx, a) {
-				refreshed = false
-				attempts++
-				continue
-			}
-		}
 		attempts++
 	}
 
@@ -83,7 +67,7 @@ func (c *Client) DeleteSession(ctx context.Context, a *auth.RequestAuth, session
 
 // DeleteSessionForToken 直接使用 token 删除会话（直通模式）
 func (c *Client) DeleteSessionForToken(ctx context.Context, token string, sessionID string) (*DeleteSessionResult, error) {
-	clients := c.requestClientsFromContext(ctx)
+	clients := c.requestClients()
 	result := &DeleteSessionResult{
 		SessionID: sessionID,
 	}
@@ -93,7 +77,7 @@ func (c *Client) DeleteSessionForToken(ctx context.Context, token string, sessio
 		return result, errors.New(result.ErrorMessage)
 	}
 
-	headers := c.authHeaders(token)
+	headers := c.authHeaders()
 	payload := map[string]any{
 		"chat_session_id": sessionID,
 	}
@@ -116,9 +100,9 @@ func (c *Client) DeleteSessionForToken(ctx context.Context, token string, sessio
 }
 
 // DeleteAllSessions 删除所有会话（谨慎使用）
-func (c *Client) DeleteAllSessions(ctx context.Context, a *auth.RequestAuth) error {
-	clients := c.requestClientsForAuth(ctx, a)
-	headers := c.authHeaders(a.DeepSeekToken)
+func (c *Client) DeleteAllSessions(ctx context.Context) error {
+	clients := c.requestClients()
+	headers := c.authHeaders()
 	payload := map[string]any{}
 
 	resp, status, err := c.postJSONWithStatus(ctx, clients.regular, clients.fallback, dsprotocol.DeepSeekDeleteAllSessionsURL, headers, payload)
@@ -139,8 +123,8 @@ func (c *Client) DeleteAllSessions(ctx context.Context, a *auth.RequestAuth) err
 
 // DeleteAllSessionsForToken 直接使用 token 删除所有会话（直通模式）
 func (c *Client) DeleteAllSessionsForToken(ctx context.Context, token string) error {
-	clients := c.requestClientsFromContext(ctx)
-	headers := c.authHeaders(token)
+	clients := c.requestClients()
+	headers := c.authHeaders()
 	payload := map[string]any{}
 
 	resp, status, err := c.postJSONWithStatus(ctx, clients.regular, clients.fallback, dsprotocol.DeepSeekDeleteAllSessionsURL, headers, payload)

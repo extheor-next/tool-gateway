@@ -114,7 +114,7 @@ const LandingPage = ({ onEnter }) => {
                         <span>📡</span> {t('landing.apiStatus')}
                     </a>
                     <a
-                        href="https://github.com/CJackHwang/tool-gateway"
+                        href="https://github.com/extheor-next/tool-gateway"
                         target="_blank"
                         className="glass-card text-white px-8 py-3 rounded-xl font-semibold transition-all flex items-center gap-2"
                     >

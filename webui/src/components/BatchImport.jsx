@@ -39,7 +39,7 @@ export default function BatchImport({ onRefresh, onMessage, authFetch }) {
             const data = await res.json()
             if (res.ok) {
                 setResult(data)
-                onMessage('success', t('batchImport.importSuccess', { keys: data.imported_keys, accounts: data.imported_accounts, provider: data.imported_external_ai || 0 }))
+                onMessage('success', t('batchImport.importSuccess', { keys: data.imported_keys, provider: data.imported_external_ai || 0 }))
                 onRefresh()
             } else {
                 onMessage('error', data.detail || t('messages.importFailed'))
@@ -188,7 +188,7 @@ export default function BatchImport({ onRefresh, onMessage, authFetch }) {
                             <div>
                                 <h4 className={clsx("font-medium", result.imported_keys || result.imported_accounts || result.imported_external_ai ? "text-emerald-500" : "text-destructive")}>{t('batchImport.importComplete')}</h4>
                                 <p className="text-sm opacity-80 mt-1">
-                                    {t('batchImport.importSummary', { keys: result.imported_keys, accounts: result.imported_accounts, provider: result.imported_external_ai || 0 })}
+                                    {t('batchImport.importSummary', { keys: result.imported_keys, provider: result.imported_external_ai || 0 })}
                                 </p>
                             </div>
                         </div>

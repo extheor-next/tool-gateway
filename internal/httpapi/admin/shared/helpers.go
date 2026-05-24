@@ -17,7 +17,6 @@ var intFrom = util.IntFrom
 var WriteJSON = util.WriteJSON
 var IntFrom = util.IntFrom
 
-func ReverseAccounts(a []config.Account) { reverseAccounts(a) }
 func IntFromQuery(r *http.Request, key string, d int) int {
 	return intFromQuery(r, key, d)
 }
@@ -27,9 +26,6 @@ func MaskSecretPreview(secret string) string {
 	return maskSecretPreview(secret)
 }
 func ToStringSlice(v any) ([]string, bool) { return toStringSlice(v) }
-func ToAccount(m map[string]any) config.Account {
-	return toAccount(m)
-}
 func ToAPIKeys(v any) ([]config.APIKey, bool) {
 	return toAPIKeys(v)
 }
@@ -52,24 +48,11 @@ func FieldStringOptional(m map[string]any, key string) (string, bool) {
 	return fieldStringOptional(m, key)
 }
 func StatusOr(v int, d int) int { return statusOr(v, d) }
-func AccountMatchesIdentifier(acc config.Account, identifier string) bool {
-	return accountMatchesIdentifier(acc, identifier)
-}
-func NormalizeAccountForStorage(acc config.Account) config.Account {
-	return normalizeAccountForStorage(acc)
-}
 func ToProxy(m map[string]any) config.Proxy {
 	return toProxy(m)
 }
 func FindProxyByID(c config.Config, proxyID string) (config.Proxy, bool) {
 	return findProxyByID(c, proxyID)
-}
-func AccountDedupeKey(acc config.Account) string { return accountDedupeKey(acc) }
-func NormalizeAndDedupeAccounts(accounts []config.Account) []config.Account {
-	return normalizeAndDedupeAccounts(accounts)
-}
-func FindAccountByIdentifier(store ConfigStore, identifier string) (config.Account, bool) {
-	return findAccountByIdentifier(store, identifier)
 }
 
 func ComputeSyncHash(store ConfigStore) string {
@@ -77,7 +60,6 @@ func ComputeSyncHash(store ConfigStore) string {
 		return ""
 	}
 	snap := store.Snapshot().Clone()
-	snap.ClearAccountTokens()
 	snap.ClearVercelCredentials()
 	snap.VercelSyncHash = ""
 	snap.VercelSyncTime = 0
@@ -93,7 +75,6 @@ func SyncHashForJSON(s string) string {
 	}
 	cfg.VercelSyncHash = ""
 	cfg.VercelSyncTime = 0
-	cfg.ClearAccountTokens()
 	cfg.ClearVercelCredentials()
 	b, err := json.Marshal(cfg)
 	if err != nil {
@@ -101,12 +82,6 @@ func SyncHashForJSON(s string) string {
 	}
 	sum := md5.Sum(b)
 	return fmt.Sprintf("%x", sum)
-}
-
-func reverseAccounts(a []config.Account) {
-	for i, j := 0, len(a)-1; i < j; i, j = i+1, j-1 {
-		a[i], a[j] = a[j], a[i]
-	}
 }
 
 func intFromQuery(r *http.Request, key string, d int) int {
@@ -156,19 +131,6 @@ func toStringSlice(v any) ([]string, bool) {
 		out = append(out, strings.TrimSpace(fmt.Sprintf("%v", item)))
 	}
 	return out, true
-}
-
-func toAccount(m map[string]any) config.Account {
-	email := fieldString(m, "email")
-	mobile := config.NormalizeMobileForStorage(fieldString(m, "mobile"))
-	return config.Account{
-		Name:     fieldString(m, "name"),
-		Remark:   fieldString(m, "remark"),
-		Email:    email,
-		Mobile:   mobile,
-		Password: fieldString(m, "password"),
-		ProxyID:  fieldString(m, "proxy_id"),
-	}
 }
 
 func toAPIKeys(v any) ([]config.APIKey, bool) {
@@ -304,29 +266,6 @@ func statusOr(v int, d int) int {
 	return v
 }
 
-func accountMatchesIdentifier(acc config.Account, identifier string) bool {
-	id := strings.TrimSpace(identifier)
-	if id == "" {
-		return false
-	}
-	if strings.TrimSpace(acc.Email) == id {
-		return true
-	}
-	if mobileKey := config.CanonicalMobileKey(id); mobileKey != "" && mobileKey == config.CanonicalMobileKey(acc.Mobile) {
-		return true
-	}
-	return acc.Identifier() == id
-}
-
-func normalizeAccountForStorage(acc config.Account) config.Account {
-	acc.Name = strings.TrimSpace(acc.Name)
-	acc.Remark = strings.TrimSpace(acc.Remark)
-	acc.Email = strings.TrimSpace(acc.Email)
-	acc.Mobile = config.NormalizeMobileForStorage(acc.Mobile)
-	acc.ProxyID = strings.TrimSpace(acc.ProxyID)
-	return acc
-}
-
 func toProxy(m map[string]any) config.Proxy {
 	return config.NormalizeProxy(config.Proxy{
 		ID:       fieldString(m, "id"),
@@ -351,55 +290,4 @@ func findProxyByID(c config.Config, proxyID string) (config.Proxy, bool) {
 		}
 	}
 	return config.Proxy{}, false
-}
-
-func accountDedupeKey(acc config.Account) string {
-	if email := strings.TrimSpace(acc.Email); email != "" {
-		return "email:" + email
-	}
-	if mobile := config.CanonicalMobileKey(acc.Mobile); mobile != "" {
-		return "mobile:" + mobile
-	}
-	if id := strings.TrimSpace(acc.Identifier()); id != "" {
-		return "id:" + id
-	}
-	return ""
-}
-
-func normalizeAndDedupeAccounts(accounts []config.Account) []config.Account {
-	if len(accounts) == 0 {
-		return nil
-	}
-	out := make([]config.Account, 0, len(accounts))
-	seen := make(map[string]struct{}, len(accounts))
-	for _, acc := range accounts {
-		acc = normalizeAccountForStorage(acc)
-		key := accountDedupeKey(acc)
-		if key == "" {
-			continue
-		}
-		if _, ok := seen[key]; ok {
-			continue
-		}
-		seen[key] = struct{}{}
-		out = append(out, acc)
-	}
-	return out
-}
-
-func findAccountByIdentifier(store ConfigStore, identifier string) (config.Account, bool) {
-	id := strings.TrimSpace(identifier)
-	if id == "" {
-		return config.Account{}, false
-	}
-	if acc, ok := store.FindAccount(id); ok {
-		return acc, true
-	}
-	accounts := store.Snapshot().Accounts
-	for _, acc := range accounts {
-		if accountMatchesIdentifier(acc, id) {
-			return acc, true
-		}
-	}
-	return config.Account{}, false
 }

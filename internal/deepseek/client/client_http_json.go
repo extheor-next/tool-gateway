@@ -65,7 +65,7 @@ func (c *Client) postJSONWithStatus(ctx context.Context, doer trans.Doer, fallba
 }
 
 func (c *Client) getJSONWithStatus(ctx context.Context, doer trans.Doer, url string, headers map[string]string) (map[string]any, int, error) {
-	clients := c.requestClientsFromContext(ctx)
+	clients := c.requestClients()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return nil, 0, err

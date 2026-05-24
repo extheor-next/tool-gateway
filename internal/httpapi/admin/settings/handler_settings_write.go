@@ -40,12 +40,6 @@ func (h *Handler) updateSettings(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		if runtimeCfg != nil {
-			if runtimeCfg.AccountMaxInflight > 0 {
-				c.Runtime.AccountMaxInflight = runtimeCfg.AccountMaxInflight
-			}
-			if runtimeCfg.AccountMaxQueue > 0 {
-				c.Runtime.AccountMaxQueue = runtimeCfg.AccountMaxQueue
-			}
 			if runtimeCfg.GlobalMaxInflight > 0 {
 				c.Runtime.GlobalMaxInflight = runtimeCfg.GlobalMaxInflight
 			}
@@ -95,7 +89,7 @@ func (h *Handler) updateSettings(w http.ResponseWriter, r *http.Request) {
 		"message":             "settings updated and hot reloaded",
 		"env_backed":          h.Store.IsEnvBacked(),
 		"needs_vercel_sync":   needsSync,
-		"manual_sync_message": "配置已保存。Vercel 部署请在 Vercel Sync 页面手动同步。",
+		"manual_sync_message": "configuration saved. For Vercel deployment, sync manually on Vercel Sync page.",
 	})
 }
 

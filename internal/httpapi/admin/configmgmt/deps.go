@@ -8,7 +8,7 @@ import (
 
 type Handler struct {
 	Store       adminshared.ConfigStore
-	Pool        adminshared.PoolController
+
 	Backend     adminshared.CompletionBackend
 	OpenAI      adminshared.OpenAIChatCaller
 	ChatHistory *chathistory.Store
@@ -20,9 +20,6 @@ func maskSecretPreview(secret string) string {
 	return adminshared.MaskSecretPreview(secret)
 }
 func toStringSlice(v any) ([]string, bool) { return adminshared.ToStringSlice(v) }
-func toAccount(m map[string]any) config.Account {
-	return adminshared.ToAccount(m)
-}
 func toAPIKeys(v any) ([]config.APIKey, bool) { return adminshared.ToAPIKeys(v) }
 func mergeAPIKeysPreferStructured(existing, incoming []config.APIKey) ([]config.APIKey, int) {
 	return adminshared.MergeAPIKeysPreferStructured(existing, incoming)
@@ -32,13 +29,6 @@ func fieldString(m map[string]any, key string) string {
 }
 func fieldStringOptional(m map[string]any, key string) (string, bool) {
 	return adminshared.FieldStringOptional(m, key)
-}
-func normalizeAccountForStorage(acc config.Account) config.Account {
-	return adminshared.NormalizeAccountForStorage(acc)
-}
-func accountDedupeKey(acc config.Account) string { return adminshared.AccountDedupeKey(acc) }
-func normalizeAndDedupeAccounts(accounts []config.Account) []config.Account {
-	return adminshared.NormalizeAndDedupeAccounts(accounts)
 }
 func newRequestError(detail string) error { return adminshared.NewRequestError(detail) }
 func requestErrorDetail(err error) (string, bool) {

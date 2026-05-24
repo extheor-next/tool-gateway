@@ -6,13 +6,13 @@
 
 <a href="https://trendshift.io/repositories/24508" target="_blank"><img src="https://trendshift.io/api/badge/repositories/24508" alt="CJackHwang%2Ftool-gateway | Trendshift" style="width: 250px; height: 55px;" width="250" height="55"/></a>
 
-[![License](https://img.shields.io/github/license/CJackHwang/tool-gateway.svg)](LICENSE)
-![Stars](https://img.shields.io/github/stars/CJackHwang/tool-gateway.svg)
-![Forks](https://img.shields.io/github/forks/CJackHwang/tool-gateway.svg)
-[![Release](https://img.shields.io/github/v/release/CJackHwang/tool-gateway?display_name=tag)](https://github.com/CJackHwang/tool-gateway/releases)
+[![License](https://img.shields.io/github/license/extheor-next/tool-gateway.svg)](LICENSE)
+![Stars](https://img.shields.io/github/stars/extheor-next/tool-gateway.svg)
+![Forks](https://img.shields.io/github/forks/extheor-next/tool-gateway.svg)
+[![Release](https://img.shields.io/github/v/release/extheor-next/tool-gateway?display_name=tag)](https://github.com/extheor-next/tool-gateway/releases)
 [![Docker](https://img.shields.io/badge/docker-ready-blue.svg)](docs/DEPLOY.en.md)
 [![Deploy on Zeabur](https://zeabur.com/button.svg)](https://zeabur.com/templates/L4CFHP)
-[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/CJackHwang/tool-gateway)
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/extheor-next/tool-gateway)
 
 Language: [中文](README.MD) | [English](README.en.md)
 
@@ -273,7 +273,7 @@ For detailed deployment instructions, see the [Deployment Guide](docs/DEPLOY.en.
 
 ```bash
 # 1. Clone
-git clone https://github.com/CJackHwang/tool-gateway.git
+git clone https://github.com/extheor-next/tool-gateway.git
 cd tool-gateway
 
 # 2. Configure

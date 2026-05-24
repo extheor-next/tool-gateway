@@ -6,7 +6,6 @@ import (
 	"strings"
 	"time"
 
-	"tool-gateway/internal/auth"
 	"tool-gateway/internal/chathistory"
 	"tool-gateway/internal/config"
 	openaifmt "tool-gateway/internal/format/openai"
@@ -24,8 +23,8 @@ type chatHistorySession struct {
 	disabled    bool
 }
 
-func startChatHistory(store *chathistory.Store, r *http.Request, a *auth.RequestAuth, stdReq promptcompat.StandardRequest) *chatHistorySession {
-	if store == nil || r == nil || a == nil {
+func startChatHistory(store *chathistory.Store, r *http.Request, stdReq promptcompat.StandardRequest) *chatHistorySession {
+	if store == nil || r == nil {
 		return nil
 	}
 	if !store.Enabled() {
@@ -35,8 +34,7 @@ func startChatHistory(store *chathistory.Store, r *http.Request, a *auth.Request
 		return nil
 	}
 	entry, err := store.Start(chathistory.StartParams{
-		CallerID:    strings.TrimSpace(a.CallerID),
-		AccountID:   strings.TrimSpace(a.AccountID),
+		CallerID:    "",
 		Surface:     "openai.chat_completions",
 		Model:       strings.TrimSpace(stdReq.ResponseModel),
 		Stream:      stdReq.Stream,
@@ -46,8 +44,7 @@ func startChatHistory(store *chathistory.Store, r *http.Request, a *auth.Request
 		FinalPrompt: stdReq.FinalPrompt,
 	})
 	startParams := chathistory.StartParams{
-		CallerID:    strings.TrimSpace(a.CallerID),
-		AccountID:   strings.TrimSpace(a.AccountID),
+		CallerID:    "",
 		Surface:     "openai.chat_completions",
 		Model:       strings.TrimSpace(stdReq.ResponseModel),
 		Stream:      stdReq.Stream,

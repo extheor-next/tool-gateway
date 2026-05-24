@@ -224,19 +224,19 @@ export default function AccountManagerContainer({ config, onRefresh, onMessage, 
                         <div className="p-6 space-y-4">
                             <div>
                                 <label className="block text-sm font-medium mb-1.5">{t('providerManager.nameLabel')}</label>
-                                <input className="input-field" value={providerForm.name} onChange={e => setProviderFieldLocal('name', e.target.value)} />
+                                <input className="input-field" placeholder={t('providerManager.namePlaceholder')} value={providerForm.name} onChange={e => setProviderFieldLocal('name', e.target.value)} />
                             </div>
                             <div>
                                 <label className="block text-sm font-medium mb-1.5">{t('providerManager.urlLabel')}</label>
-                                <input className="input-field" value={providerForm.base_url} onChange={e => setProviderFieldLocal('base_url', e.target.value)} />
+                                <input className="input-field" placeholder="https://api.openai.com/v1" value={providerForm.base_url} onChange={e => setProviderFieldLocal('base_url', e.target.value)} />
                             </div>
                             <div>
                                 <label className="block text-sm font-medium mb-1.5">{t('providerManager.apiKeyLabel')}</label>
-                                <input className="input-field" type="password" value={providerForm.api_key} onChange={e => setProviderFieldLocal('api_key', e.target.value)} />
+                                <input className="input-field" type="password" placeholder="sk-..." value={providerForm.api_key} onChange={e => setProviderFieldLocal('api_key', e.target.value)} />
                             </div>
                             <div>
                                 <label className="block text-sm font-medium mb-1.5">{t('providerManager.modelLabel')}</label>
-                                <input className="input-field" value={providerForm.model} onChange={e => setProviderFieldLocal('model', e.target.value)} />
+                                <input className="input-field" placeholder="gpt-4o-mini" value={providerForm.model} onChange={e => setProviderFieldLocal('model', e.target.value)} />
                             </div>
                             <div>
                                 <label className="block text-sm font-medium mb-1.5">{t('providerManager.modeLabel')}</label>
@@ -246,18 +246,6 @@ export default function AccountManagerContainer({ config, onRefresh, onMessage, 
                                     <option value="claude">claude</option>
                                     <option value="gemini">gemini</option>
                                 </select>
-                            </div>
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                <div>
-                                    <label className="block text-sm font-medium mb-1.5">{t('providerManager.maxInflightLabel')}</label>
-                                    <input className="input-field" type="number" min="0" value={providerForm.max_inflight} onChange={e => setProviderFieldLocal('max_inflight', e.target.value)} />
-                                    <p className="text-xs text-muted-foreground mt-1.5">{t('providerManager.maxInflightHelp')}</p>
-                                </div>
-                                <div>
-                                    <label className="block text-sm font-medium mb-1.5">{t('providerManager.maxQueueLabel')}</label>
-                                    <input className="input-field" type="number" min="0" value={providerForm.max_queue} onChange={e => setProviderFieldLocal('max_queue', e.target.value)} />
-                                    <p className="text-xs text-muted-foreground mt-1.5">{t('providerManager.maxQueueHelp')}</p>
-                                </div>
                             </div>
                             <div className="flex justify-end gap-2 pt-2">
                                 <button onClick={closeProviderModal} className="px-4 py-2 rounded-lg border border-border hover:bg-secondary transition-colors text-sm font-medium">{t('actions.cancel')}</button>

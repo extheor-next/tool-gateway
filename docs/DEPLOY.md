@@ -433,7 +433,7 @@ TOOL_GATEWAY_CHAT_HISTORY_PATH=/tmp/chat_history.json
 
 ```bash
 # 克隆仓库
-git clone https://github.com/CJackHwang/tool-gateway.git
+git clone https://github.com/extheor-next/tool-gateway.git
 cd tool-gateway
 
 # 复制并编辑配置

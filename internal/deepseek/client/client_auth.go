@@ -4,64 +4,25 @@ import (
 	"context"
 	dsprotocol "tool-gateway/internal/deepseek/protocol"
 	"errors"
-	"fmt"
 	"net/http"
 	"strings"
 	"unicode"
 
-	"tool-gateway/internal/auth"
 	"tool-gateway/internal/config"
 )
 
-func (c *Client) Login(ctx context.Context, acc config.Account) (string, error) {
-	clients := c.requestClientsForAccount(acc)
-	payload := map[string]any{
-		"password":  strings.TrimSpace(acc.Password),
-		"device_id": "deepseek_to_api",
-		"os":        "android",
-	}
-	if email := strings.TrimSpace(acc.Email); email != "" {
-		payload["email"] = email
-	} else if mobile := strings.TrimSpace(acc.Mobile); mobile != "" {
-		loginMobile, areaCode := normalizeMobileForLogin(mobile)
-		payload["mobile"] = loginMobile
-		payload["area_code"] = areaCode
-	} else {
-		return "", errors.New("missing email/mobile")
-	}
-	resp, err := c.postJSON(ctx, clients.regular, clients.fallback, dsprotocol.DeepSeekLoginURL, dsprotocol.BaseHeaders, payload)
-	if err != nil {
-		return "", err
-	}
-	code := intFrom(resp["code"])
-	if code != 0 {
-		return "", fmt.Errorf("login failed: %v", resp["msg"])
-	}
-	data, _ := resp["data"].(map[string]any)
-	if intFrom(data["biz_code"]) != 0 {
-		return "", fmt.Errorf("login failed: %v", data["biz_msg"])
-	}
-	bizData, _ := data["biz_data"].(map[string]any)
-	user, _ := bizData["user"].(map[string]any)
-	token, _ := user["token"].(string)
-	if strings.TrimSpace(token) == "" {
-		return "", errors.New("missing login token")
-	}
-	return token, nil
-}
-
-func (c *Client) CreateSession(ctx context.Context, a *auth.RequestAuth, maxAttempts int) (string, error) {
+// CreateSession creates a new DeepSeek chat session using the gateway API key.
+func (c *Client) CreateSession(ctx context.Context, maxAttempts int) (string, error) {
 	if maxAttempts <= 0 {
 		maxAttempts = c.maxRetries
 	}
-	clients := c.requestClientsForAuth(ctx, a)
+	clients := c.requestClients()
 	attempts := 0
-	refreshed := false
 	for attempts < maxAttempts {
-		headers := c.authHeaders(a.DeepSeekToken)
+		headers := c.authHeaders()
 		resp, status, err := c.postJSONWithStatus(ctx, clients.regular, clients.fallback, dsprotocol.DeepSeekCreateSessionURL, headers, map[string]any{"agent": "chat"})
 		if err != nil {
-			config.Logger.Warn("[create_session] request error", "error", err, "account", a.AccountID)
+			config.Logger.Warn("[create_session] request error", "error", err)
 			attempts++
 			continue
 		}
@@ -72,30 +33,19 @@ func (c *Client) CreateSession(ctx context.Context, a *auth.RequestAuth, maxAtte
 				return sessionID, nil
 			}
 		}
-		config.Logger.Warn("[create_session] failed", "status", status, "code", code, "biz_code", bizCode, "msg", msg, "biz_msg", bizMsg, "use_config_token", a.UseConfigToken, "account", a.AccountID)
-		if a.UseConfigToken {
-			if !refreshed && shouldAttemptRefresh(status, code, bizCode, msg, bizMsg) {
-				if c.Auth.RefreshToken(ctx, a) {
-					refreshed = true
-					continue
-				}
-			}
-			if c.Auth.SwitchAccount(ctx, a) {
-				refreshed = false
-				attempts++
-				continue
-			}
-		}
+		config.Logger.Warn("[create_session] failed", "status", status, "code", code, "biz_code", bizCode, "msg", msg, "biz_msg", bizMsg)
 		attempts++
 	}
 	return "", errors.New("create session failed")
 }
 
-func (c *Client) GetPow(ctx context.Context, a *auth.RequestAuth, maxAttempts int) (string, error) {
-	return c.GetPowForTarget(ctx, a, dsprotocol.DeepSeekCompletionTargetPath, maxAttempts)
+// GetPow fetches a proof-of-work challenge for the completion endpoint.
+func (c *Client) GetPow(ctx context.Context, maxAttempts int) (string, error) {
+	return c.GetPowForTarget(ctx, dsprotocol.DeepSeekCompletionTargetPath, maxAttempts)
 }
 
-func (c *Client) GetPowForTarget(ctx context.Context, a *auth.RequestAuth, targetPath string, maxAttempts int) (string, error) {
+// GetPowForTarget fetches a proof-of-work challenge for a specific target path.
+func (c *Client) GetPowForTarget(ctx context.Context, targetPath string, maxAttempts int) (string, error) {
 	if maxAttempts <= 0 {
 		maxAttempts = c.maxRetries
 	}
@@ -103,18 +53,13 @@ func (c *Client) GetPowForTarget(ctx context.Context, a *auth.RequestAuth, targe
 	if targetPath == "" {
 		targetPath = dsprotocol.DeepSeekCompletionTargetPath
 	}
-	clients := c.requestClientsForAuth(ctx, a)
+	clients := c.requestClients()
 	attempts := 0
-	refreshed := false
-	lastFailureKind := FailureUnknown
-	lastFailureMessage := ""
 	for attempts < maxAttempts {
-		headers := c.authHeaders(a.DeepSeekToken)
+		headers := c.authHeaders()
 		resp, status, err := c.postJSONWithStatus(ctx, clients.regular, clients.fallback, dsprotocol.DeepSeekCreatePowURL, headers, map[string]any{"target_path": targetPath})
 		if err != nil {
-			config.Logger.Warn("[get_pow] request error", "error", err, "account", a.AccountID, "target_path", targetPath)
-			lastFailureKind = FailureUnknown
-			lastFailureMessage = err.Error()
+			config.Logger.Warn("[get_pow] request error", "error", err, "target_path", targetPath)
 			attempts++
 			continue
 		}
@@ -130,119 +75,23 @@ func (c *Client) GetPowForTarget(ctx context.Context, a *auth.RequestAuth, targe
 			}
 			return BuildPowHeader(challenge, answer)
 		}
-		config.Logger.Warn("[get_pow] failed", "status", status, "code", code, "biz_code", bizCode, "msg", msg, "biz_msg", bizMsg, "use_config_token", a.UseConfigToken, "account", a.AccountID, "target_path", targetPath)
-		lastFailureMessage = failureMessage(msg, bizMsg, "get pow failed")
-		if isTokenInvalid(status, code, bizCode, msg, bizMsg) || isAuthIndicativeBizFailure(msg, bizMsg) {
-			lastFailureKind = authFailureKind(a.UseConfigToken)
-		} else {
-			lastFailureKind = FailureUnknown
-		}
-		if a.UseConfigToken {
-			if !refreshed && shouldAttemptRefresh(status, code, bizCode, msg, bizMsg) {
-				if c.Auth.RefreshToken(ctx, a) {
-					refreshed = true
-					continue
-				}
-			}
-			if c.Auth.SwitchAccount(ctx, a) {
-				refreshed = false
-				attempts++
-				continue
-			}
-		}
+		config.Logger.Warn("[get_pow] failed", "status", status, "code", code, "biz_code", bizCode, "msg", msg, "biz_msg", bizMsg, "target_path", targetPath)
 		attempts++
-	}
-	if lastFailureKind != FailureUnknown {
-		return "", &RequestFailure{Op: "get pow", Kind: lastFailureKind, Message: lastFailureMessage}
 	}
 	return "", errors.New("get pow failed")
 }
 
-func (c *Client) authHeaders(token string) map[string]string {
+// authHeaders returns headers for DeepSeek API requests using the gateway key.
+func (c *Client) authHeaders() map[string]string {
 	headers := make(map[string]string, len(dsprotocol.BaseHeaders)+1)
 	for k, v := range dsprotocol.BaseHeaders {
 		headers[k] = v
 	}
-	headers["authorization"] = "Bearer " + token
+	headers["authorization"] = "Bearer " + c.deepseekKey
 	return headers
 }
 
-func isTokenInvalid(status int, code int, bizCode int, msg string, bizMsg string) bool {
-	msg = strings.ToLower(strings.TrimSpace(msg) + " " + strings.TrimSpace(bizMsg))
-	if status == http.StatusUnauthorized || status == http.StatusForbidden {
-		return true
-	}
-	if code == 40001 || code == 40002 || code == 40003 || bizCode == 40001 || bizCode == 40002 || bizCode == 40003 {
-		return true
-	}
-	return strings.Contains(msg, "token") ||
-		strings.Contains(msg, "unauthorized") ||
-		strings.Contains(msg, "expired") ||
-		strings.Contains(msg, "not login") ||
-		strings.Contains(msg, "login required") ||
-		strings.Contains(msg, "invalid jwt")
-}
-
-func shouldAttemptRefresh(status int, code int, bizCode int, msg string, bizMsg string) bool {
-	if isTokenInvalid(status, code, bizCode, msg, bizMsg) {
-		return true
-	}
-	// Some DeepSeek failures come back as HTTP 200/code=0 but with non-zero biz_code.
-	// Only attempt refresh when these biz failures still look auth-related.
-	return status == http.StatusOK &&
-		code == 0 &&
-		bizCode != 0 &&
-		isAuthIndicativeBizFailure(msg, bizMsg)
-}
-
-func isAuthIndicativeBizFailure(msg string, bizMsg string) bool {
-	combined := strings.ToLower(strings.TrimSpace(msg) + " " + strings.TrimSpace(bizMsg))
-	authKeywords := []string{
-		"auth",
-		"authorization",
-		"credential",
-		"expired",
-		"invalid jwt",
-		"jwt",
-		"login",
-		"not login",
-		"session expired",
-		"token",
-		"unauthorized",
-		"登录",
-		"未登录",
-		"认证",
-		"凭证",
-		"会话过期",
-		"令牌",
-	}
-	for _, keyword := range authKeywords {
-		if strings.Contains(combined, keyword) {
-			return true
-		}
-	}
-	return false
-}
-
-func authFailureKind(useConfigToken bool) FailureKind {
-	if useConfigToken {
-		return FailureManagedUnauthorized
-	}
-	return FailureDirectUnauthorized
-}
-
-func failureMessage(msg string, bizMsg string, fallback string) string {
-	if trimmed := strings.TrimSpace(bizMsg); trimmed != "" {
-		return trimmed
-	}
-	if trimmed := strings.TrimSpace(msg); trimmed != "" {
-		return trimmed
-	}
-	return strings.TrimSpace(fallback)
-}
-
-// DeepSeek has returned create-session ids in both biz_data.id and
-// biz_data.chat_session.id across observed response variants; accept either.
+// extractCreateSessionID extracts the session ID from create-session API response.
 func extractCreateSessionID(resp map[string]any) string {
 	data, _ := resp["data"].(map[string]any)
 	bizData, _ := data["biz_data"].(map[string]any)

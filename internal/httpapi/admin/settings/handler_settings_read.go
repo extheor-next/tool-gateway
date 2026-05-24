@@ -11,7 +11,7 @@ import (
 
 func (h *Handler) getSettings(w http.ResponseWriter, _ *http.Request) {
 	snap := h.Store.Snapshot()
-	recommended := defaultRuntimeRecommended(len(snap.Accounts), h.Store.RuntimeAccountMaxInflight())
+	recommended := 100
 	needsSync := config.IsVercel() && snap.VercelSyncHash != "" && snap.VercelSyncHash != h.computeSyncHash()
 	writeJSON(w, http.StatusOK, map[string]any{
 		"success": true,
@@ -22,21 +22,21 @@ func (h *Handler) getSettings(w http.ResponseWriter, _ *http.Request) {
 			"default_password_warning": authn.UsingDefaultAdminKey(h.Store),
 		},
 		"runtime": map[string]any{
-			"account_max_inflight":         h.Store.RuntimeAccountMaxInflight(),
-			"account_max_queue":            h.Store.RuntimeAccountMaxQueue(recommended),
+			"account_max_inflight":         recommended,
+			"account_max_queue":            recommended,
 			"global_max_inflight":          h.Store.RuntimeGlobalMaxInflight(recommended),
-			"token_refresh_interval_hours": h.Store.RuntimeTokenRefreshIntervalHours(),
+			"token_refresh_interval_hours": 0,
 		},
 		"responses":   snap.Responses,
 		"embeddings":  snap.Embeddings,
 		"auto_delete": snap.AutoDelete,
 		"current_input_file": map[string]any{
-			"enabled":   h.Store.CurrentInputFileEnabled(),
-			"min_chars": h.Store.CurrentInputFileMinChars(),
+			"enabled":   true,
+			"min_chars": 0,
 		},
 		"thinking_injection": map[string]any{
-			"enabled":        h.Store.ThinkingInjectionEnabled(),
-			"prompt":         h.Store.ThinkingInjectionPrompt(),
+			"enabled":        true,
+			"prompt":         "",
 			"default_prompt": promptcompat.DefaultThinkingInjectionPrompt,
 		},
 		"model_aliases":     snap.ModelAliases,

@@ -25,40 +25,7 @@ func (h *Handler) updateConfig(w http.ResponseWriter, r *http.Request) {
 		} else if keys, ok := toStringSlice(req["keys"]); ok {
 			c.Keys = keys
 		}
-		if accountsRaw, ok := req["accounts"].([]any); ok {
-			existing := map[string]config.Account{}
-			for _, a := range old.Accounts {
-				a = normalizeAccountForStorage(a)
-				key := accountDedupeKey(a)
-				if key != "" {
-					existing[key] = a
-				}
-			}
-			seen := map[string]struct{}{}
-			accounts := make([]config.Account, 0, len(accountsRaw))
-			for _, item := range accountsRaw {
-				m, ok := item.(map[string]any)
-				if !ok {
-					continue
-				}
-				acc := normalizeAccountForStorage(toAccount(m))
-				key := accountDedupeKey(acc)
-				if key == "" {
-					continue
-				}
-				if _, ok := seen[key]; ok {
-					continue
-				}
-				if prev, ok := existing[key]; ok {
-					if strings.TrimSpace(acc.Password) == "" {
-						acc.Password = prev.Password
-					}
-				}
-				seen[key] = struct{}{}
-				accounts = append(accounts, acc)
-			}
-			c.Accounts = accounts
-		}
+
 		if externalAIRaw, ok := req["external_ai"].(map[string]any); ok {
 			c.ExternalAI = normalizeExternalAIForStorage(toExternalAI(externalAIRaw, old.ExternalAI))
 		}
@@ -82,7 +49,6 @@ func (h *Handler) updateConfig(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusInternalServerError, map[string]any{"detail": err.Error()})
 		return
 	}
-	h.Pool.Reset()
 	writeJSON(w, http.StatusOK, map[string]any{"success": true, "message": "配置已更新"})
 }
 
@@ -357,7 +323,7 @@ func (h *Handler) batchImport(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]any{"detail": "无效的 JSON 格式"})
 		return
 	}
-	importedKeys, importedAccounts, importedExternalAI := 0, 0, 0
+	importedKeys, importedExternalAI := 0, 0
 	err := h.Store.Update(func(c *config.Config) error {
 		if apiKeys, ok := toAPIKeys(req["api_keys"]); ok {
 			var changed int
@@ -386,34 +352,6 @@ func (h *Handler) batchImport(w http.ResponseWriter, r *http.Request) {
 		if providersRaw, ok := req["external_ai_providers"].(map[string]any); ok {
 			incomingProviders := toExternalAIProviders(providersRaw, c.ExternalAIProviders)
 			c.ExternalAIProviders = mergeExternalAIProviders(c.ExternalAIProviders, incomingProviders)
-			if active, ok := activeExternalAIProvider(c.ExternalAIProviders); ok {
-				c.ExternalAI = normalizeExternalAIForStorage(config.ExternalAIFromProvider(active))
-			}
-			importedExternalAI = len(incomingProviders.Providers)
-		}
-		if accounts, ok := req["accounts"].([]any); ok {
-			existing := map[string]bool{}
-			for _, a := range c.Accounts {
-				a = normalizeAccountForStorage(a)
-				key := accountDedupeKey(a)
-				if key != "" {
-					existing[key] = true
-				}
-			}
-			for _, item := range accounts {
-				m, ok := item.(map[string]any)
-				if !ok {
-					continue
-				}
-				acc := normalizeAccountForStorage(toAccount(m))
-				key := accountDedupeKey(acc)
-				if key == "" || existing[key] {
-					continue
-				}
-				c.Accounts = append(c.Accounts, acc)
-				existing[key] = true
-				importedAccounts++
-			}
 		}
 		return nil
 	})
@@ -421,6 +359,5 @@ func (h *Handler) batchImport(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusInternalServerError, map[string]any{"detail": err.Error()})
 		return
 	}
-	h.Pool.Reset()
-	writeJSON(w, http.StatusOK, map[string]any{"success": true, "imported_keys": importedKeys, "imported_accounts": importedAccounts, "imported_external_ai": importedExternalAI})
+	writeJSON(w, http.StatusOK, map[string]any{"success": true, "imported_keys": importedKeys, "imported_accounts": 0, "imported_external_ai": importedExternalAI})
 }

@@ -12,7 +12,7 @@ const MAX_AUTO_FETCH_FAILURES = 3
 
 const DEFAULT_FORM = {
     admin: { jwt_expire_hours: 24 },
-    runtime: { account_max_inflight: 2, account_max_queue: 10, global_max_inflight: 10, token_refresh_interval_hours: 6 },
+    runtime: {},
     responses: { store_ttl_seconds: 900 },
     embeddings: { provider: '' },
     auto_delete: { mode: 'none' },
@@ -53,12 +53,7 @@ function fromServerForm(data) {
     const currentInputFileEnabled = data.current_input_file?.enabled ?? true
     return {
         admin: { jwt_expire_hours: Number(data.admin?.jwt_expire_hours || 24) },
-        runtime: {
-            account_max_inflight: Number(data.runtime?.account_max_inflight || 2),
-            account_max_queue: Number(data.runtime?.account_max_queue || 10),
-            global_max_inflight: Number(data.runtime?.global_max_inflight || 10),
-            token_refresh_interval_hours: Number(data.runtime?.token_refresh_interval_hours || 6),
-        },
+        runtime: {},
         responses: {
             store_ttl_seconds: Number(data.responses?.store_ttl_seconds || 900),
         },
@@ -85,12 +80,7 @@ function toServerPayload(form) {
     const currentInputFileEnabled = Boolean(form.current_input_file?.enabled)
     return {
         admin: { jwt_expire_hours: Number(form.admin.jwt_expire_hours) },
-        runtime: {
-            account_max_inflight: Number(form.runtime.account_max_inflight),
-            account_max_queue: Number(form.runtime.account_max_queue),
-            global_max_inflight: Number(form.runtime.global_max_inflight),
-            token_refresh_interval_hours: Number(form.runtime.token_refresh_interval_hours),
-        },
+        runtime: {},
         responses: { store_ttl_seconds: Number(form.responses.store_ttl_seconds) },
         embeddings: { provider: String(form.embeddings.provider || '').trim() },
         auto_delete: { mode: normalizeAutoDeleteMode(form.auto_delete) },

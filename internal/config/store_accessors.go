@@ -109,63 +109,6 @@ func (s *Store) AdminJWTValidAfterUnix() int64 {
 	return s.cfg.Admin.JWTValidAfterUnix
 }
 
-func (s *Store) RuntimeAccountMaxInflight() int {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	if s.cfg.Runtime.AccountMaxInflight > 0 {
-		return s.cfg.Runtime.AccountMaxInflight
-	}
-	if raw := strings.TrimSpace(os.Getenv("TOOL_GATEWAY_ACCOUNT_MAX_INFLIGHT")); raw != "" {
-		if n, err := strconv.Atoi(raw); err == nil && n > 0 {
-			return n
-		}
-	}
-	return 2
-}
-
-func (s *Store) RuntimeAccountMaxQueue(defaultSize int) int {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	if s.cfg.Runtime.AccountMaxQueue > 0 {
-		return s.cfg.Runtime.AccountMaxQueue
-	}
-	if raw := strings.TrimSpace(os.Getenv("TOOL_GATEWAY_ACCOUNT_MAX_QUEUE")); raw != "" {
-		if n, err := strconv.Atoi(raw); err == nil && n >= 0 {
-			return n
-		}
-	}
-	if defaultSize < 0 {
-		return 0
-	}
-	return defaultSize
-}
-
-func (s *Store) RuntimeGlobalMaxInflight(defaultSize int) int {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	if s.cfg.Runtime.GlobalMaxInflight > 0 {
-		return s.cfg.Runtime.GlobalMaxInflight
-	}
-	if raw := strings.TrimSpace(os.Getenv("TOOL_GATEWAY_GLOBAL_MAX_INFLIGHT")); raw != "" {
-		if n, err := strconv.Atoi(raw); err == nil && n > 0 {
-			return n
-		}
-	}
-	if defaultSize < 0 {
-		return 0
-	}
-	return defaultSize
-}
-
-func (s *Store) RuntimeTokenRefreshIntervalHours() int {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	if s.cfg.Runtime.TokenRefreshIntervalHours > 0 {
-		return s.cfg.Runtime.TokenRefreshIntervalHours
-	}
-	return 6
-}
-
 func (s *Store) AutoDeleteSessions() bool {
 	return s.AutoDeleteMode() != "none"
 }
@@ -198,4 +141,13 @@ func (s *Store) ThinkingInjectionPrompt() string {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return strings.TrimSpace(s.cfg.ThinkingInjection.Prompt)
+}
+
+func (s *Store) RuntimeGlobalMaxInflight(defaultSize int) int {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if s.cfg.Runtime.GlobalMaxInflight > 0 {
+		return s.cfg.Runtime.GlobalMaxInflight
+	}
+	return defaultSize
 }

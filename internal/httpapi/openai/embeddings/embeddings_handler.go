@@ -8,7 +8,6 @@ import (
 	"net/http"
 	"strings"
 
-	"tool-gateway/internal/auth"
 	"tool-gateway/internal/chathistory"
 	"tool-gateway/internal/config"
 	"tool-gateway/internal/httpapi/openai/shared"
@@ -23,17 +22,11 @@ type Handler struct {
 }
 
 func (h *Handler) Embeddings(w http.ResponseWriter, r *http.Request) {
-	a, err := h.Auth.Determine(r)
+	_, err := h.Auth.Determine(r)
 	if err != nil {
-		status := http.StatusUnauthorized
-		detail := err.Error()
-		if err == auth.ErrNoAccount {
-			status = http.StatusTooManyRequests
-		}
-		shared.WriteOpenAIError(w, status, detail)
+		shared.WriteOpenAIError(w, http.StatusUnauthorized, err.Error())
 		return
 	}
-	defer h.Auth.Release(a)
 
 	r.Body = http.MaxBytesReader(w, r.Body, shared.GeneralMaxSize)
 	var req map[string]any

@@ -10,7 +10,6 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"tool-gateway/internal/auth"
 	"tool-gateway/internal/chathistory"
 	"tool-gateway/internal/config"
 	dsclient "tool-gateway/internal/deepseek/client"
@@ -27,21 +26,15 @@ type Handler struct {
 }
 
 type fileFetcher interface {
-	FetchUploadedFile(ctx context.Context, a *auth.RequestAuth, fileID string) (*dsclient.UploadFileResult, error)
+	FetchUploadedFile(ctx context.Context, fileID string) (*dsclient.UploadFileResult, error)
 }
 
 func (h *Handler) UploadFile(w http.ResponseWriter, r *http.Request) {
-	a, err := h.Auth.Determine(r)
+	_, err := h.Auth.Determine(r)
 	if err != nil {
-		status := http.StatusUnauthorized
-		detail := err.Error()
-		if err == auth.ErrNoAccount {
-			status = http.StatusTooManyRequests
-		}
-		shared.WriteOpenAIError(w, status, detail)
+		shared.WriteOpenAIError(w, http.StatusUnauthorized, err.Error())
 		return
 	}
-	defer h.Auth.Release(a)
 	if !strings.HasPrefix(strings.ToLower(strings.TrimSpace(r.Header.Get("Content-Type"))), "multipart/form-data") {
 		shared.WriteOpenAIError(w, http.StatusBadRequest, "content-type must be multipart/form-data")
 		return
@@ -59,7 +52,6 @@ func (h *Handler) UploadFile(w http.ResponseWriter, r *http.Request) {
 	if r.MultipartForm != nil {
 		defer func() { _ = r.MultipartForm.RemoveAll() }()
 	}
-	r = r.WithContext(auth.WithAuth(r.Context(), a))
 	file, header, err := r.FormFile("file")
 	if err != nil {
 		shared.WriteOpenAIError(w, http.StatusBadRequest, "file is required")
@@ -76,7 +68,7 @@ func (h *Handler) UploadFile(w http.ResponseWriter, r *http.Request) {
 		contentType = http.DetectContentType(data)
 	}
 	modelType := resolveUploadModelType(h.Store, r)
-	result, err := h.Backend.UploadFile(r.Context(), a, dsclient.UploadFileRequest{
+	result, err := h.Backend.UploadFile(r.Context(), dsclient.UploadFileRequest{
 		Filename:    header.Filename,
 		ContentType: contentType,
 		Purpose:     strings.TrimSpace(r.FormValue("purpose")),
@@ -87,24 +79,15 @@ func (h *Handler) UploadFile(w http.ResponseWriter, r *http.Request) {
 		shared.WriteOpenAIError(w, http.StatusInternalServerError, "Failed to upload file.")
 		return
 	}
-	if result != nil && result.AccountID == "" {
-		result.AccountID = a.AccountID
-	}
 	shared.WriteJSON(w, http.StatusOK, buildOpenAIFileObject(result))
 }
 
 func (h *Handler) RetrieveFile(w http.ResponseWriter, r *http.Request) {
-	a, err := h.Auth.Determine(r)
+	_, err := h.Auth.Determine(r)
 	if err != nil {
-		status := http.StatusUnauthorized
-		detail := err.Error()
-		if err == auth.ErrNoAccount {
-			status = http.StatusTooManyRequests
-		}
-		shared.WriteOpenAIError(w, status, detail)
+		shared.WriteOpenAIError(w, http.StatusUnauthorized, err.Error())
 		return
 	}
-	defer h.Auth.Release(a)
 
 	fileID := strings.TrimSpace(chi.URLParam(r, "file_id"))
 	if fileID == "" {
@@ -116,7 +99,7 @@ func (h *Handler) RetrieveFile(w http.ResponseWriter, r *http.Request) {
 		shared.WriteOpenAIError(w, http.StatusNotImplemented, "file retrieval is not available")
 		return
 	}
-	result, err := fetcher.FetchUploadedFile(r.Context(), a, fileID)
+	result, err := fetcher.FetchUploadedFile(r.Context(), fileID)
 	if err != nil {
 		if errors.Is(err, dsclient.ErrUploadFileNotFound) {
 			shared.WriteOpenAIError(w, http.StatusNotFound, "file not found")
@@ -124,9 +107,6 @@ func (h *Handler) RetrieveFile(w http.ResponseWriter, r *http.Request) {
 		}
 		shared.WriteOpenAIError(w, http.StatusInternalServerError, "Failed to retrieve file.")
 		return
-	}
-	if result != nil && result.AccountID == "" {
-		result.AccountID = a.AccountID
 	}
 	shared.WriteJSON(w, http.StatusOK, buildOpenAIFileObject(result))
 }
@@ -181,8 +161,8 @@ func buildOpenAIFileObject(result *dsclient.UploadFileResult) map[string]any {
 		"status":         result.Status,
 		"status_details": nil,
 	}
-	if result.AccountID != "" {
-		obj["account_id"] = result.AccountID
+	if result.CallerID != "" {
+		obj["caller_id"] = result.CallerID
 	}
 	return obj
 }

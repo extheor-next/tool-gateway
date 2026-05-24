@@ -40,7 +40,7 @@ func (h *Handler) handleNonStreamWithRetry(w http.ResponseWriter, ctx context.Co
 		ToolChoice:      promptcompat.DefaultToolChoicePolicy(),
 	}
 	retryEnabled := h != nil && h.Backend != nil && emptyOutputRetryEnabled()
-	result, outErr := completionruntime.ExecuteNonStreamStartedWithRetry(ctx, h.Backend, a, completionruntime.StartResult{
+	result, outErr := completionruntime.ExecuteNonStreamStartedWithRetry(ctx, h.Backend, completionruntime.StartResult{
 		SessionID: completionID,
 		Payload:   payload,
 		Pow:       pow,
@@ -66,12 +66,12 @@ func (h *Handler) handleNonStreamWithRetry(w http.ResponseWriter, ctx context.Co
 	writeJSON(w, http.StatusOK, respBody)
 }
 
-func (h *Handler) handleStreamWithRetry(w http.ResponseWriter, r *http.Request, a *auth.RequestAuth, resp *http.Response, payload map[string]any, pow, completionID string, sessionIDRef *string, stdReq promptcompat.StandardRequest, model, finalPrompt string, refFileTokens int, thinkingEnabled, searchEnabled bool, toolNames []string, toolsRaw any, toolChoice promptcompat.ToolChoicePolicy, historySession *chatHistorySession) {
+func (h *Handler) handleStreamWithRetry(w http.ResponseWriter, r *http.Request, resp *http.Response, payload map[string]any, pow, completionID string, sessionIDRef *string, stdReq promptcompat.StandardRequest, model, finalPrompt string, refFileTokens int, thinkingEnabled, searchEnabled bool, toolNames []string, toolsRaw any, toolChoice promptcompat.ToolChoicePolicy, historySession *chatHistorySession) {
 	streamRuntime, initialType, ok := h.prepareChatStreamRuntime(w, resp, completionID, model, finalPrompt, refFileTokens, thinkingEnabled, searchEnabled, toolNames, toolsRaw, toolChoice, historySession)
 	if !ok {
 		return
 	}
-	completionruntime.ExecuteStreamWithRetry(r.Context(), h.Backend, a, resp, payload, pow, completionruntime.StreamRetryOptions{
+	completionruntime.ExecuteStreamWithRetry(r.Context(), h.Backend, resp, payload, pow, completionruntime.StreamRetryOptions{
 		Surface:          "chat.completions",
 		Stream:           true,
 		RetryEnabled:     emptyOutputRetryEnabled(),
@@ -79,7 +79,6 @@ func (h *Handler) handleStreamWithRetry(w http.ResponseWriter, r *http.Request, 
 		MaxAttempts:      3,
 		UsagePrompt:      finalPrompt,
 		Request:          stdReq,
-		CurrentInputFile: h.Store,
 	}, completionruntime.StreamRetryHooks{
 		ConsumeAttempt: func(currentResp *http.Response, allowDeferEmpty bool) (bool, bool) {
 			return h.consumeChatStreamAttempt(r, currentResp, streamRuntime, initialType, thinkingEnabled, historySession, allowDeferEmpty)
@@ -97,11 +96,6 @@ func (h *Handler) handleStreamWithRetry(w http.ResponseWriter, r *http.Request, 
 		},
 		OnRetryFailure: func(status int, message, code string) {
 			failChatStreamRetry(streamRuntime, historySession, status, message, code)
-		},
-		OnAccountSwitch: func(sessionID string) {
-			if sessionIDRef != nil {
-				*sessionIDRef = sessionID
-			}
 		},
 		OnTerminal: func(attempts int) {
 			logChatStreamTerminal(streamRuntime, attempts)

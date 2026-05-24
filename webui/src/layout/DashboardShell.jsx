@@ -45,7 +45,7 @@ export default function DashboardShell({ token, onLogout, config, fetchConfig, s
     const [sidebarOpen, setSidebarOpen] = useState(false)
 
     const navItems = [
-        { id: 'accounts', label: t('nav.providers.label'), icon: Users, description: t('nav.providers.desc') },
+        { id: 'providers', label: t('nav.providers.label'), icon: Users, description: t('nav.providers.desc') },
         { id: 'proxies', label: t('nav.proxies.label'), icon: Globe, description: t('nav.proxies.desc') },
         { id: 'test', label: t('nav.test.label'), icon: Server, description: t('nav.test.desc') },
         { id: 'history', label: t('nav.history.label'), icon: History, description: t('nav.history.desc') },
@@ -58,12 +58,12 @@ export default function DashboardShell({ token, onLogout, config, fetchConfig, s
     const pathSegments = location.pathname.replace(/^\/+|\/+$/g, '').split('/').filter(Boolean)
     const routeSegments = pathSegments[0] === 'admin' ? pathSegments.slice(1) : pathSegments
     const pathTab = routeSegments[0] || ''
-    const activeTab = tabIds.has(pathTab) ? pathTab : 'accounts'
+    const activeTab = tabIds.has(pathTab) ? pathTab : 'providers'
     const adminBasePath = pathSegments[0] === 'admin' ? '/admin' : ''
     const activeNavItem = navItems.find(n => n.id === activeTab)
 
     const navigateToTab = useCallback((tabID) => {
-        const nextPath = tabID === 'accounts'
+        const nextPath = tabID === 'providers'
             ? `${adminBasePath || ''}/`
             : `${adminBasePath}/${tabID}`
         navigate(nextPath)
@@ -109,7 +109,7 @@ export default function DashboardShell({ token, onLogout, config, fetchConfig, s
     }, [authFetch])
     const renderTab = () => {
         switch (activeTab) {
-            case 'accounts':
+            case 'providers':
                 return <AccountManagerContainer config={config} onRefresh={fetchConfig} onMessage={showMessage} authFetch={authFetch} />
             case 'proxies':
                 return <ProxyManagerContainer config={config} onRefresh={fetchConfig} onMessage={showMessage} authFetch={authFetch} />
@@ -204,7 +204,7 @@ export default function DashboardShell({ token, onLogout, config, fetchConfig, s
                             {versionInfo?.has_update && (
                                 <a
                                     className="inline-flex mt-1 text-[10px] text-amber-500 hover:text-amber-400"
-                                    href={versionInfo?.release_url || 'https://github.com/CJackHwang/tool-gateway/releases/latest'}
+                                    href={versionInfo?.release_url || 'https://github.com/extheor-next/tool-gateway/releases/latest'}
                                     target="_blank"
                                     rel="noreferrer"
                                 >

@@ -8,7 +8,6 @@ import (
 	"strings"
 
 	"tool-gateway/internal/assistantturn"
-	"tool-gateway/internal/auth"
 	"tool-gateway/internal/config"
 	dsclient "tool-gateway/internal/deepseek/client"
 	"tool-gateway/internal/httpapi/openai/history"
@@ -18,10 +17,10 @@ import (
 )
 
 type CompletionBackend interface {
-	CreateSession(ctx context.Context, a *auth.RequestAuth, maxAttempts int) (string, error)
-	GetPow(ctx context.Context, a *auth.RequestAuth, maxAttempts int) (string, error)
-	UploadFile(ctx context.Context, a *auth.RequestAuth, req dsclient.UploadFileRequest, maxAttempts int) (*dsclient.UploadFileResult, error)
-	CallCompletion(ctx context.Context, a *auth.RequestAuth, payload map[string]any, powResp string, maxAttempts int) (*http.Response, error)
+	CreateSession(ctx context.Context, maxAttempts int) (string, error)
+	GetPow(ctx context.Context, maxAttempts int) (string, error)
+	UploadFile(ctx context.Context, req dsclient.UploadFileRequest, maxAttempts int) (*dsclient.UploadFileResult, error)
+	CallCompletion(ctx context.Context, payload map[string]any, powResp string) (*http.Response, error)
 }
 
 type Options struct {
@@ -47,37 +46,37 @@ type StartResult struct {
 	Request   promptcompat.StandardRequest
 }
 
-func StartCompletion(ctx context.Context, ds CompletionBackend, a *auth.RequestAuth, stdReq promptcompat.StandardRequest, opts Options) (StartResult, *assistantturn.OutputError) {
+func StartCompletion(ctx context.Context, ds CompletionBackend, stdReq promptcompat.StandardRequest, opts Options) (StartResult, *assistantturn.OutputError) {
 	maxAttempts := opts.MaxAttempts
 	if maxAttempts <= 0 {
 		maxAttempts = 3
 	}
 	var prepErr *assistantturn.OutputError
-	stdReq, prepErr = prepareCurrentInputFile(ctx, ds, a, stdReq, opts)
+	stdReq, prepErr = prepareCurrentInputFile(ctx, ds, stdReq, opts)
 	if prepErr != nil {
 		return StartResult{Request: stdReq}, prepErr
 	}
-	sessionID, err := ds.CreateSession(ctx, a, maxAttempts)
+	sessionID, err := ds.CreateSession(ctx, maxAttempts)
 	if err != nil {
-		return StartResult{Request: stdReq}, authOutputError(a)
+		return StartResult{Request: stdReq}, authOutputError()
 	}
-	pow, err := ds.GetPow(ctx, a, maxAttempts)
+	pow, err := ds.GetPow(ctx, maxAttempts)
 	if err != nil {
 		return StartResult{SessionID: sessionID, Request: stdReq}, &assistantturn.OutputError{Status: http.StatusUnauthorized, Message: "Failed to get PoW (invalid token or unknown error).", Code: "error"}
 	}
 	payload := stdReq.CompletionPayload(sessionID)
-	resp, err := ds.CallCompletion(ctx, a, payload, pow, maxAttempts)
+	resp, err := ds.CallCompletion(ctx, payload, pow)
 	if err != nil {
 		return StartResult{SessionID: sessionID, Payload: payload, Pow: pow, Request: stdReq}, &assistantturn.OutputError{Status: http.StatusInternalServerError, Message: "Failed to get completion.", Code: "error"}
 	}
 	return StartResult{SessionID: sessionID, Payload: payload, Pow: pow, Response: resp, Request: stdReq}, nil
 }
 
-func prepareCurrentInputFile(ctx context.Context, ds CompletionBackend, a *auth.RequestAuth, stdReq promptcompat.StandardRequest, opts Options) (promptcompat.StandardRequest, *assistantturn.OutputError) {
+func prepareCurrentInputFile(ctx context.Context, ds CompletionBackend, stdReq promptcompat.StandardRequest, opts Options) (promptcompat.StandardRequest, *assistantturn.OutputError) {
 	if opts.CurrentInputFile == nil || stdReq.CurrentInputFileApplied {
 		return stdReq, nil
 	}
-	out, err := (history.Service{Store: opts.CurrentInputFile, Backend: ds}).ApplyCurrentInputFile(ctx, a, stdReq)
+	out, err := (history.Service{Store: opts.CurrentInputFile, Backend: ds}).ApplyCurrentInputFile(ctx, stdReq)
 	if err != nil {
 		status, message := history.MapError(err)
 		return out, &assistantturn.OutputError{Status: status, Message: message, Code: "error"}
@@ -85,15 +84,15 @@ func prepareCurrentInputFile(ctx context.Context, ds CompletionBackend, a *auth.
 	return out, nil
 }
 
-func ExecuteNonStreamWithRetry(ctx context.Context, ds CompletionBackend, a *auth.RequestAuth, stdReq promptcompat.StandardRequest, opts Options) (NonStreamResult, *assistantturn.OutputError) {
-	start, startErr := StartCompletion(ctx, ds, a, stdReq, opts)
+func ExecuteNonStreamWithRetry(ctx context.Context, ds CompletionBackend, stdReq promptcompat.StandardRequest, opts Options) (NonStreamResult, *assistantturn.OutputError) {
+	start, startErr := StartCompletion(ctx, ds, stdReq, opts)
 	if startErr != nil {
 		return NonStreamResult{SessionID: start.SessionID, Payload: start.Payload}, startErr
 	}
-	return ExecuteNonStreamStartedWithRetry(ctx, ds, a, start, opts)
+	return ExecuteNonStreamStartedWithRetry(ctx, ds, start, opts)
 }
 
-func ExecuteNonStreamStartedWithRetry(ctx context.Context, ds CompletionBackend, a *auth.RequestAuth, start StartResult, opts Options) (NonStreamResult, *assistantturn.OutputError) {
+func ExecuteNonStreamStartedWithRetry(ctx context.Context, ds CompletionBackend, start StartResult, opts Options) (NonStreamResult, *assistantturn.OutputError) {
 	stdReq := start.Request
 	maxAttempts := opts.MaxAttempts
 	if maxAttempts <= 0 {
@@ -104,7 +103,6 @@ func ExecuteNonStreamStartedWithRetry(ctx context.Context, ds CompletionBackend,
 	pow := start.Pow
 
 	attempts := 0
-	accountSwitchAttempted := false
 	currentResp := start.Response
 	usagePrompt := stdReq.PromptTokenText
 	accumulatedThinking := ""
@@ -113,24 +111,6 @@ func ExecuteNonStreamStartedWithRetry(ctx context.Context, ds CompletionBackend,
 	for {
 		turn, outErr := collectAttempt(currentResp, stdReq, usagePrompt, opts)
 		if outErr != nil {
-			if canRetryOnAlternateAccount(ctx, a, outErr, opts.RetryEnabled, &accountSwitchAttempted) {
-				switched, switchErr := startStandardCompletionOnAlternateAccount(ctx, ds, a, stdReq, opts, maxAttempts)
-				if switchErr != nil {
-					return NonStreamResult{SessionID: sessionID, Payload: payload, Attempts: attempts}, switchErr
-				}
-				if switched.Response != nil {
-					config.Logger.Info("[completion_runtime_account_switch_retry] retrying after 429", "surface", stdReq.Surface, "stream", false, "account", a.AccountID)
-					sessionID = switched.SessionID
-					payload = switched.Payload
-					pow = switched.Pow
-					currentResp = switched.Response
-					usagePrompt = stdReq.PromptTokenText
-					accumulatedThinking = ""
-					accumulatedRawThinking = ""
-					accumulatedToolDetectionThinking = ""
-					continue
-				}
-			}
 			return NonStreamResult{SessionID: sessionID, Payload: payload, Attempts: attempts}, outErr
 		}
 		accumulatedThinking += sse.TrimContinuationOverlap(accumulatedThinking, turn.Thinking)
@@ -153,90 +133,24 @@ func ExecuteNonStreamStartedWithRetry(ctx context.Context, ds CompletionBackend,
 			retryMax = shared.EmptyOutputRetryMaxAttempts()
 		}
 		if !opts.RetryEnabled || !assistantturn.ShouldRetryEmptyOutput(turn, attempts, retryMax) {
-			if canRetryOnAlternateAccount(ctx, a, turn.Error, opts.RetryEnabled, &accountSwitchAttempted) {
-				switched, switchErr := startStandardCompletionOnAlternateAccount(ctx, ds, a, stdReq, opts, maxAttempts)
-				if switchErr != nil {
-					return NonStreamResult{SessionID: sessionID, Payload: payload, Turn: turn, Attempts: attempts}, switchErr
-				}
-				if switched.Response != nil {
-					config.Logger.Info("[completion_runtime_account_switch_retry] retrying after 429", "surface", stdReq.Surface, "stream", false, "account", a.AccountID)
-					sessionID = switched.SessionID
-					payload = switched.Payload
-					pow = switched.Pow
-					currentResp = switched.Response
-					usagePrompt = stdReq.PromptTokenText
-					accumulatedThinking = ""
-					accumulatedRawThinking = ""
-					accumulatedToolDetectionThinking = ""
-					continue
-				}
-			}
 			return NonStreamResult{SessionID: sessionID, Payload: payload, Turn: turn, Attempts: attempts}, turn.Error
 		}
 
 		attempts++
 		config.Logger.Info("[completion_runtime_empty_retry] attempting synthetic retry", "surface", stdReq.Surface, "stream", false, "retry_attempt", attempts, "parent_message_id", turn.ResponseMessageID)
-		retryPow, powErr := ds.GetPow(ctx, a, maxAttempts)
+		retryPow, powErr := ds.GetPow(ctx, maxAttempts)
 		if powErr != nil {
 			config.Logger.Warn("[completion_runtime_empty_retry] retry PoW fetch failed, falling back to original PoW", "surface", stdReq.Surface, "retry_attempt", attempts, "error", powErr)
 			retryPow = pow
 		}
 		retryPayload := shared.ClonePayloadForEmptyOutputRetry(payload, turn.ResponseMessageID)
-		nextResp, err := ds.CallCompletion(ctx, a, retryPayload, retryPow, maxAttempts)
+		nextResp, err := ds.CallCompletion(ctx, retryPayload, retryPow)
 		if err != nil {
 			return NonStreamResult{SessionID: sessionID, Payload: payload, Turn: turn, Attempts: attempts}, &assistantturn.OutputError{Status: http.StatusInternalServerError, Message: "Failed to get completion.", Code: "error"}
 		}
 		usagePrompt = shared.UsagePromptWithEmptyOutputRetry(usagePrompt, attempts)
 		currentResp = nextResp
 	}
-}
-
-func canRetryOnAlternateAccount(ctx context.Context, a *auth.RequestAuth, outErr *assistantturn.OutputError, retryEnabled bool, attempted *bool) bool {
-	if outErr == nil || outErr.Status != http.StatusTooManyRequests {
-		return false
-	}
-	if !retryEnabled || attempted == nil || *attempted {
-		return false
-	}
-	if a == nil || !a.UseConfigToken {
-		return false
-	}
-	*attempted = true
-	return a.SwitchAccount(ctx)
-}
-
-func startStandardCompletionOnAlternateAccount(ctx context.Context, ds CompletionBackend, a *auth.RequestAuth, stdReq promptcompat.StandardRequest, opts Options, maxAttempts int) (StartResult, *assistantturn.OutputError) {
-	var prepErr *assistantturn.OutputError
-	stdReq, prepErr = reuploadCurrentInputFileForAccount(ctx, ds, a, stdReq, opts)
-	if prepErr != nil {
-		return StartResult{Request: stdReq}, prepErr
-	}
-	sessionID, err := ds.CreateSession(ctx, a, maxAttempts)
-	if err != nil {
-		return StartResult{}, authOutputError(a)
-	}
-	pow, err := ds.GetPow(ctx, a, maxAttempts)
-	if err != nil {
-		return StartResult{SessionID: sessionID}, &assistantturn.OutputError{Status: http.StatusUnauthorized, Message: "Failed to get PoW (invalid token or unknown error).", Code: "error"}
-	}
-	payload := stdReq.CompletionPayload(sessionID)
-	resp, err := ds.CallCompletion(ctx, a, payload, pow, maxAttempts)
-	if err != nil {
-		return StartResult{SessionID: sessionID, Payload: payload, Pow: pow}, &assistantturn.OutputError{Status: http.StatusInternalServerError, Message: "Failed to get completion.", Code: "error"}
-	}
-	return StartResult{SessionID: sessionID, Payload: payload, Pow: pow, Response: resp, Request: stdReq}, nil
-}
-
-func reuploadCurrentInputFileForAccount(ctx context.Context, ds CompletionBackend, a *auth.RequestAuth, stdReq promptcompat.StandardRequest, opts Options) (promptcompat.StandardRequest, *assistantturn.OutputError) {
-	if opts.CurrentInputFile == nil || !stdReq.CurrentInputFileApplied {
-		return stdReq, nil
-	}
-	out, err := (history.Service{Store: opts.CurrentInputFile, Backend: ds}).ReuploadAppliedCurrentInputFile(ctx, a, stdReq)
-	if err != nil {
-		status, message := history.MapError(err)
-		return out, &assistantturn.OutputError{Status: status, Message: message, Code: "error"}
-	}
-	return out, nil
 }
 
 func collectAttempt(resp *http.Response, stdReq promptcompat.StandardRequest, usagePrompt string, opts Options) (assistantturn.Turn, *assistantturn.OutputError) {
@@ -270,11 +184,8 @@ func buildOptions(stdReq promptcompat.StandardRequest, prompt string, opts Optio
 	}
 }
 
-func authOutputError(a *auth.RequestAuth) *assistantturn.OutputError {
-	if a != nil && a.UseConfigToken {
-		return &assistantturn.OutputError{Status: http.StatusUnauthorized, Message: "Account token is invalid. Please re-login the account in admin.", Code: "error"}
-	}
-	return &assistantturn.OutputError{Status: http.StatusUnauthorized, Message: "Invalid token. If this should be a Tool Gateway key, add it to config.keys first.", Code: "error"}
+func authOutputError() *assistantturn.OutputError {
+	return &assistantturn.OutputError{Status: http.StatusUnauthorized, Message: "Invalid token.", Code: "error"}
 }
 
 func Errorf(status int, format string, args ...any) *assistantturn.OutputError {

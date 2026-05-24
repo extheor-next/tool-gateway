@@ -42,24 +42,24 @@ func stripReferenceMarkersEnabled() bool {
 	return textclean.StripReferenceMarkersEnabled()
 }
 
-func (h *Handler) applyCurrentInputFile(ctx context.Context, a *auth.RequestAuth, stdReq promptcompat.StandardRequest) (promptcompat.StandardRequest, error) {
+func (h *Handler) applyCurrentInputFile(ctx context.Context, stdReq promptcompat.StandardRequest) (promptcompat.StandardRequest, error) {
 	if h == nil {
 		return stdReq, nil
 	}
 	stdReq = shared.ApplyThinkingInjection(h.Store, stdReq)
 	svc := history.Service{Store: h.Store, Backend: h.Backend}
-	out, err := svc.ApplyCurrentInputFile(ctx, a, stdReq)
+	out, err := svc.ApplyCurrentInputFile(ctx, stdReq)
 	if err != nil || out.CurrentInputFileApplied {
 		return out, err
 	}
 	return out, nil
 }
 
-func (h *Handler) preprocessInlineFileInputs(ctx context.Context, a *auth.RequestAuth, req map[string]any) error {
+func (h *Handler) preprocessInlineFileInputs(ctx context.Context, req map[string]any) error {
 	if h == nil {
 		return nil
 	}
-	return (&files.Handler{Store: h.Store, Auth: h.Auth, Backend: h.Backend, ChatHistory: h.ChatHistory}).PreprocessInlineFileInputs(ctx, a, req)
+	return (&files.Handler{Store: h.Store, Auth: h.Auth, Backend: h.Backend, ChatHistory: h.ChatHistory}).PreprocessInlineFileInputs(ctx, req)
 }
 
 func (h *Handler) toolcallFeatureMatchEnabled() bool {

@@ -8,7 +8,6 @@ import (
 	"strings"
 	"testing"
 
-	"tool-gateway/internal/auth"
 	"tool-gateway/internal/config"
 )
 
@@ -65,10 +64,10 @@ func TestOpenAIAdapterCallCompletionBuildsRequest(t *testing.T) {
 		}, nil
 	})}
 
-	resp, err := adapter.CallCompletion(context.Background(), &auth.RequestAuth{}, map[string]any{
+	resp, err := adapter.CallCompletion(context.Background(), map[string]any{
 		"prompt":      "hello",
 		"temperature": 0.2,
-	}, "", 1)
+	}, "")
 	if err != nil {
 		t.Fatalf("CallCompletion() error: %v", err)
 	}
@@ -122,7 +121,7 @@ func TestOpenAIAdapterCallCompletionReturnsUpstreamErrorResponse(t *testing.T) {
 		return &http.Response{StatusCode: http.StatusTooManyRequests, Body: io.NopCloser(strings.NewReader("rate limited"))}, nil
 	})}
 
-	resp, err := adapter.CallCompletion(context.Background(), nil, map[string]any{"prompt": "hello"}, "", 1)
+	resp, err := adapter.CallCompletion(context.Background(), map[string]any{"prompt": "hello"}, "")
 	if err != nil {
 		t.Fatalf("CallCompletion() error: %v", err)
 	}
@@ -136,7 +135,7 @@ func TestOpenAIAdapterCallCompletionRequiresConfig(t *testing.T) {
 	t.Setenv("EXTERNAL_AI_BASE_URL", "")
 	t.Setenv("EXTERNAL_AI_API_KEY", "")
 	adapter := NewOpenAIAdapter(nil)
-	_, err := adapter.CallCompletion(context.Background(), nil, map[string]any{"prompt": "hello"}, "", 1)
+	_, err := adapter.CallCompletion(context.Background(), map[string]any{"prompt": "hello"}, "")
 	if err == nil || !strings.Contains(err.Error(), "base_url") {
 		t.Fatalf("expected base_url error, got %v", err)
 	}

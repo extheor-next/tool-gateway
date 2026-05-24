@@ -47,7 +47,6 @@ func TestStoreCreatesAndPersistsEntries(t *testing.T) {
 
 	started, err := store.Start(StartParams{
 		CallerID:  "caller:abc",
-		AccountID: "user@example.com",
 		Model:     "deepseek-v4-flash",
 		Stream:    true,
 		UserInput: "hello",
@@ -311,7 +310,6 @@ func TestStoreAutoMigratesMetadataOnlyLegacyMonolith(t *testing.T) {
 			UpdatedAt:    2,
 			Status:       "error",
 			CallerID:     "caller:test",
-			AccountID:    "acct:test",
 			Model:        "deepseek-v4-flash",
 			Stream:       true,
 			UserInput:    "hello",

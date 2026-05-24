@@ -41,9 +41,9 @@ func (h *Handler) configImport(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]any{"detail": err.Error()})
 		return
 	}
-	incoming.ClearAccountTokens()
+	// accounts removed
 
-	importedKeys, importedAccounts := 0, 0
+	importedKeys := 0; var importedAccounts int
 	err = h.Store.Update(func(c *config.Config) error {
 		next := c.Clone()
 		if mode == "replace" {
@@ -53,11 +53,10 @@ func (h *Handler) configImport(w http.ResponseWriter, r *http.Request) {
 			if active, ok := activeExternalAIProvider(next.ExternalAIProviders); ok {
 				next.ExternalAI = normalizeExternalAIForStorage(config.ExternalAIFromProvider(active))
 			}
-			next.Accounts = normalizeAndDedupeAccounts(next.Accounts)
 			next.VercelSyncHash = c.VercelSyncHash
 			next.VercelSyncTime = c.VercelSyncTime
 			importedKeys = len(next.APIKeys)
-			importedAccounts = len(next.Accounts)
+			_ = importedAccounts // accounts removed
 		} else {
 			var changed int
 			next.APIKeys, changed = mergeAPIKeysPreferStructured(next.APIKeys, incoming.APIKeys)
@@ -72,27 +71,6 @@ func (h *Handler) configImport(w http.ResponseWriter, r *http.Request) {
 				}
 			}
 
-			existingAccounts := map[string]struct{}{}
-			for _, acc := range next.Accounts {
-				acc = normalizeAccountForStorage(acc)
-				key := accountDedupeKey(acc)
-				if key != "" {
-					existingAccounts[key] = struct{}{}
-				}
-			}
-			for _, acc := range incoming.Accounts {
-				acc = normalizeAccountForStorage(acc)
-				key := accountDedupeKey(acc)
-				if key == "" {
-					continue
-				}
-				if _, ok := existingAccounts[key]; ok {
-					continue
-				}
-				existingAccounts[key] = struct{}{}
-				next.Accounts = append(next.Accounts, acc)
-				importedAccounts++
-			}
 
 			if len(incoming.ModelAliases) > 0 {
 				if next.ModelAliases == nil {
@@ -121,17 +99,8 @@ func (h *Handler) configImport(w http.ResponseWriter, r *http.Request) {
 			if incoming.Admin.JWTValidAfterUnix > 0 {
 				next.Admin.JWTValidAfterUnix = incoming.Admin.JWTValidAfterUnix
 			}
-			if incoming.Runtime.AccountMaxInflight > 0 {
-				next.Runtime.AccountMaxInflight = incoming.Runtime.AccountMaxInflight
-			}
-			if incoming.Runtime.AccountMaxQueue > 0 {
-				next.Runtime.AccountMaxQueue = incoming.Runtime.AccountMaxQueue
-			}
 			if incoming.Runtime.GlobalMaxInflight > 0 {
 				next.Runtime.GlobalMaxInflight = incoming.Runtime.GlobalMaxInflight
-			}
-			if incoming.Runtime.TokenRefreshIntervalHours > 0 {
-				next.Runtime.TokenRefreshIntervalHours = incoming.Runtime.TokenRefreshIntervalHours
 			}
 		}
 
@@ -152,7 +121,6 @@ func (h *Handler) configImport(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	h.Pool.Reset()
 	writeJSON(w, http.StatusOK, map[string]any{
 		"success":           true,
 		"mode":              mode,

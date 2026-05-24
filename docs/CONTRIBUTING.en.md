@@ -16,7 +16,7 @@ Thanks for your interest in contributing to Tool Gateway!
 
 ```bash
 # 1. Clone
-git clone https://github.com/CJackHwang/tool-gateway.git
+git clone https://github.com/extheor-next/tool-gateway.git
 cd tool-gateway
 
 # 2. Configure
@@ -108,7 +108,7 @@ Before contributing, review the architecture doc sections for request flow and `
 
 ## Reporting Issues
 
-Please use [GitHub Issues](https://github.com/CJackHwang/tool-gateway/issues) and include:
+Please use [GitHub Issues](https://github.com/extheor-next/tool-gateway/issues) and include:
 
 - Steps to reproduce
 - Relevant log output

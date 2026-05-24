@@ -33,41 +33,21 @@ function decorateModel(t, modelID) {
     const isVision = modelID.includes('vision')
     const isSearch = modelID.includes('search')
     const isPro = modelID.includes('pro')
+    const displayName = modelID
+        .replace(/^deepseek-/, '')
+        .replace(/-nothinking$/, '')
+        .replace(/-/g, ' ')
 
     if (isVision && isSearch) {
-        return {
-            id: modelID,
-            name: modelID,
-            icon: 'ImageIcon',
-            desc: describeModel(t, modelID),
-            color: 'text-fuchsia-600',
-        }
+        return { id: modelID, name: displayName, icon: 'ImageIcon', desc: describeModel(t, modelID), color: 'text-fuchsia-600' }
     }
     if (isVision) {
-        return {
-            id: modelID,
-            name: modelID,
-            icon: 'ImageIcon',
-            desc: describeModel(t, modelID),
-            color: 'text-violet-500',
-        }
+        return { id: modelID, name: displayName, icon: 'ImageIcon', desc: describeModel(t, modelID), color: 'text-violet-500' }
     }
     if (isSearch) {
-        return {
-            id: modelID,
-            name: modelID,
-            icon: 'SearchIcon',
-            desc: describeModel(t, modelID),
-            color: isPro ? 'text-cyan-600' : 'text-cyan-500',
-        }
+        return { id: modelID, name: displayName, icon: 'SearchIcon', desc: describeModel(t, modelID), color: isPro ? 'text-cyan-600' : 'text-cyan-500' }
     }
-    return {
-        id: modelID,
-        name: modelID,
-        icon: isPro ? 'Cpu' : 'MessageSquare',
-        desc: describeModel(t, modelID),
-        color: isPro ? 'text-amber-600' : 'text-amber-500',
-    }
+    return { id: modelID, name: displayName, icon: isPro ? 'Cpu' : 'MessageSquare', desc: describeModel(t, modelID), color: isPro ? 'text-amber-600' : 'text-amber-500' }
 }
 
 export default function ApiTesterContainer({ config, onMessage, authFetch }) {

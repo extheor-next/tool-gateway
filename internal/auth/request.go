@@ -7,10 +7,7 @@ import (
 	"errors"
 	"net/http"
 	"strings"
-	"sync"
-	"time"
 
-	"tool-gateway/internal/account"
 	"tool-gateway/internal/config"
 )
 
@@ -21,40 +18,28 @@ const authCtxKey ctxKey = "auth_context"
 var (
 	ErrUnauthorized  = errors.New("unauthorized: missing auth token")
 	ErrInvalidAPIKey = errors.New("unauthorized: invalid api key")
-	ErrNoAccount     = errors.New("no accounts configured or all accounts are busy")
 )
 
+// RequestAuth holds the auth context for a single request.
+// With the account-pool removed, all requests are direct: the caller's
+// API key is validated and the request passes through unchanged.
 type RequestAuth struct {
-	UseConfigToken bool
-	DeepSeekToken  string
-	CallerID       string
-	AccountID      string
-	TargetAccount  string
-	Account        config.Account
-	TriedAccounts  map[string]bool
-	resolver       *Resolver
+	CallerID string
 }
 
-type LoginFunc func(ctx context.Context, acc config.Account) (string, error)
-
+// Resolver validates gateway API keys and populates RequestAuth.
+// There is no account pool, no token refresh, and no managed account
+// acquisition — just API key validation.
 type Resolver struct {
 	Store *config.Store
-	Pool  *account.Pool
-	Login LoginFunc
-
-	mu               sync.Mutex
-	tokenRefreshedAt map[string]time.Time
 }
 
-func NewResolver(store *config.Store, pool *account.Pool, login LoginFunc) *Resolver {
-	return &Resolver{
-		Store:            store,
-		Pool:             pool,
-		Login:            login,
-		tokenRefreshedAt: map[string]time.Time{},
-	}
+// NewResolver creates a Resolver backed by the given config store.
+func NewResolver(store *config.Store) *Resolver {
+	return &Resolver{Store: store}
 }
 
+// Determine validates the caller's API key and returns a RequestAuth.
 func (r *Resolver) Determine(req *http.Request) (*RequestAuth, error) {
 	callerKey := extractCallerToken(req)
 	if callerKey == "" {
@@ -63,171 +48,31 @@ func (r *Resolver) Determine(req *http.Request) (*RequestAuth, error) {
 	if r == nil || r.Store == nil || !r.Store.HasAPIKey(callerKey) {
 		return nil, ErrInvalidAPIKey
 	}
-	callerID := callerTokenID(callerKey)
-	ctx := req.Context()
-	if len(r.Store.Accounts()) == 0 {
-		return &RequestAuth{
-			UseConfigToken: false,
-			CallerID:       callerID,
-			resolver:       r,
-			TriedAccounts:  map[string]bool{},
-		}, nil
-	}
-	target := strings.TrimSpace(req.Header.Get("X-Tool-Gateway-Target-Account"))
-	a, err := r.acquireManagedRequestAuth(ctx, callerID, target)
-	if err != nil {
-		return nil, err
-	}
-	return a, nil
-}
-
-func (r *Resolver) acquireManagedRequestAuth(ctx context.Context, callerID, target string) (*RequestAuth, error) {
-	tried := map[string]bool{}
-	var lastEnsureErr error
-	for {
-		if target == "" && len(tried) >= len(r.Store.Accounts()) {
-			if lastEnsureErr != nil {
-				return nil, lastEnsureErr
-			}
-			return nil, ErrNoAccount
-		}
-		acc, ok := r.Pool.AcquireWait(ctx, target, tried)
-		if !ok {
-			if lastEnsureErr != nil {
-				return nil, lastEnsureErr
-			}
-			return nil, ErrNoAccount
-		}
-
-		a := &RequestAuth{
-			UseConfigToken: true,
-			CallerID:       callerID,
-			AccountID:      acc.Identifier(),
-			TargetAccount:  target,
-			Account:        acc,
-			TriedAccounts:  tried,
-			resolver:       r,
-		}
-
-		if err := r.ensureManagedToken(ctx, a); err != nil {
-			lastEnsureErr = err
-			tried[a.AccountID] = true
-			r.Pool.Release(a.AccountID)
-			if target != "" {
-				return nil, err
-			}
-			continue
-		}
-		return a, nil
-	}
-}
-
-// DetermineCaller resolves caller identity without acquiring any pooled account.
-// Use this for local-cache lookup routes that only need tenant isolation.
-func (r *Resolver) DetermineCaller(req *http.Request) (*RequestAuth, error) {
-	callerKey := extractCallerToken(req)
-	if callerKey == "" {
-		return nil, ErrUnauthorized
-	}
-	if r == nil || r.Store == nil || !r.Store.HasAPIKey(callerKey) {
-		return nil, ErrInvalidAPIKey
-	}
 	return &RequestAuth{
-		UseConfigToken: false,
-		CallerID:       callerTokenID(callerKey),
-		resolver:       r,
-		TriedAccounts:  map[string]bool{},
+		CallerID: callerTokenID(callerKey),
 	}, nil
 }
 
+// DetermineCaller is an alias for Determine — with the account pool
+// removed there is no distinction between the two.
+func (r *Resolver) DetermineCaller(req *http.Request) (*RequestAuth, error) {
+	return r.Determine(req)
+}
+
+// WithAuth stores the auth context in the request context.
 func WithAuth(ctx context.Context, a *RequestAuth) context.Context {
 	return context.WithValue(ctx, authCtxKey, a)
 }
 
+// FromContext retrieves the auth context previously stored with WithAuth.
 func FromContext(ctx context.Context) (*RequestAuth, bool) {
 	v := ctx.Value(authCtxKey)
 	a, ok := v.(*RequestAuth)
 	return a, ok
 }
 
-func (r *Resolver) loginAndPersist(ctx context.Context, a *RequestAuth) error {
-	token, err := r.Login(ctx, a.Account)
-	if err != nil {
-		return err
-	}
-	a.Account.Token = token
-	a.DeepSeekToken = token
-	r.markTokenRefreshedNow(a.AccountID)
-	return r.Store.UpdateAccountToken(a.AccountID, token)
-}
-
-func (r *Resolver) RefreshToken(ctx context.Context, a *RequestAuth) bool {
-	if !a.UseConfigToken || a.AccountID == "" {
-		return false
-	}
-	_ = r.Store.UpdateAccountToken(a.AccountID, "")
-	a.Account.Token = ""
-	if err := r.loginAndPersist(ctx, a); err != nil {
-		config.Logger.Error("[refresh_token] failed", "account", a.AccountID, "error", err)
-		return false
-	}
-	return true
-}
-
-func (r *Resolver) MarkTokenInvalid(a *RequestAuth) {
-	if !a.UseConfigToken || a.AccountID == "" {
-		return
-	}
-	a.Account.Token = ""
-	a.DeepSeekToken = ""
-	r.clearTokenRefreshMark(a.AccountID)
-	_ = r.Store.UpdateAccountToken(a.AccountID, "")
-}
-
-func (r *Resolver) SwitchAccount(ctx context.Context, a *RequestAuth) bool {
-	if !a.UseConfigToken {
-		return false
-	}
-	if strings.TrimSpace(a.TargetAccount) != "" {
-		return false
-	}
-	if a.TriedAccounts == nil {
-		a.TriedAccounts = map[string]bool{}
-	}
-	if a.AccountID != "" {
-		a.TriedAccounts[a.AccountID] = true
-		r.Pool.Release(a.AccountID)
-	}
-	for {
-		acc, ok := r.Pool.Acquire("", a.TriedAccounts)
-		if !ok {
-			return false
-		}
-		a.Account = acc
-		a.AccountID = acc.Identifier()
-		if err := r.ensureManagedToken(ctx, a); err != nil {
-			a.TriedAccounts[a.AccountID] = true
-			r.Pool.Release(a.AccountID)
-			continue
-		}
-		return true
-	}
-}
-
-func (a *RequestAuth) SwitchAccount(ctx context.Context) bool {
-	if a == nil || a.resolver == nil {
-		return false
-	}
-	return a.resolver.SwitchAccount(ctx, a)
-}
-
-func (r *Resolver) Release(a *RequestAuth) {
-	if a == nil || !a.UseConfigToken || a.AccountID == "" {
-		return
-	}
-	r.Pool.Release(a.AccountID)
-}
-
+// extractCallerToken pulls the caller's credential from the request using
+// standard conventions (Bearer header, x-api-key, x-goog-api-key, query params).
 func extractCallerToken(req *http.Request) string {
 	authHeader := strings.TrimSpace(req.Header.Get("Authorization"))
 	if strings.HasPrefix(strings.ToLower(authHeader), "bearer ") {
@@ -251,6 +96,7 @@ func extractCallerToken(req *http.Request) string {
 	return strings.TrimSpace(req.URL.Query().Get("api_key"))
 }
 
+// callerTokenID returns a stable, short hash prefix of the token for logging/identification.
 func callerTokenID(token string) string {
 	token = strings.TrimSpace(token)
 	if token == "" {
@@ -258,58 +104,4 @@ func callerTokenID(token string) string {
 	}
 	sum := sha256.Sum256([]byte(token))
 	return "caller:" + hex.EncodeToString(sum[:8])
-}
-
-func (r *Resolver) ensureManagedToken(ctx context.Context, a *RequestAuth) error {
-	if strings.TrimSpace(a.Account.Token) == "" {
-		return r.loginAndPersist(ctx, a)
-	}
-	if r.shouldForceRefresh(a.AccountID) {
-		if err := r.loginAndPersist(ctx, a); err != nil {
-			return err
-		}
-		return nil
-	}
-	a.DeepSeekToken = a.Account.Token
-	return nil
-}
-
-func (r *Resolver) shouldForceRefresh(accountID string) bool {
-	if r == nil || r.Store == nil {
-		return false
-	}
-	if strings.TrimSpace(accountID) == "" {
-		return false
-	}
-	intervalHours := r.Store.RuntimeTokenRefreshIntervalHours()
-	if intervalHours <= 0 {
-		return false
-	}
-	now := time.Now()
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	last, ok := r.tokenRefreshedAt[accountID]
-	if !ok || last.IsZero() {
-		r.tokenRefreshedAt[accountID] = now
-		return false
-	}
-	return now.Sub(last) >= time.Duration(intervalHours)*time.Hour
-}
-
-func (r *Resolver) markTokenRefreshedNow(accountID string) {
-	if strings.TrimSpace(accountID) == "" {
-		return
-	}
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	r.tokenRefreshedAt[accountID] = time.Now()
-}
-
-func (r *Resolver) clearTokenRefreshMark(accountID string) {
-	if strings.TrimSpace(accountID) == "" {
-		return
-	}
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	delete(r.tokenRefreshedAt, accountID)
 }

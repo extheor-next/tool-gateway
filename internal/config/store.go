@@ -16,8 +16,6 @@ type Store struct {
 	path    string
 	fromEnv bool
 	keyMap  map[string]struct{} // O(1) API key lookup index
-	accMap  map[string]int      // O(1) account lookup: identifier -> slice index
-	accTest map[string]string   // runtime-only account test status cache
 }
 
 func LoadStore() *Store {
@@ -25,7 +23,7 @@ func LoadStore() *Store {
 	if err != nil {
 		Logger.Warn("[config] load failed", "error", err)
 	}
-	if len(store.cfg.Keys) == 0 && len(store.cfg.Accounts) == 0 {
+	if len(store.cfg.Keys) == 0 {
 		Logger.Warn("[config] empty config loaded")
 	}
 	store.rebuildIndexes()
@@ -63,8 +61,6 @@ func loadConfig() (Config, bool, error) {
 			}
 			return cfg, true, err
 		}
-		cfg.ClearAccountTokens()
-		cfg.DropInvalidAccounts()
 		if IsVercel() || !envWritebackEnabled() {
 			return cfg, true, err
 		}
@@ -72,7 +68,6 @@ func loadConfig() (Config, bool, error) {
 		if fileErr == nil {
 			var fileCfg Config
 			if unmarshalErr := json.Unmarshal(content, &fileCfg); unmarshalErr == nil {
-				fileCfg.DropInvalidAccounts()
 				return fileCfg, false, err
 			}
 		}
@@ -128,12 +123,6 @@ func loadConfigFromFile(path string) (Config, error) {
 		return Config{}, err
 	}
 	cfg.NormalizeCredentials()
-	cfg.DropInvalidAccounts()
-	if strings.Contains(string(content), `"test_status"`) && !IsVercel() {
-		if b, err := json.MarshalIndent(cfg, "", "  "); err == nil {
-			_ = os.WriteFile(path, b, 0o644)
-		}
-	}
 	return cfg, nil
 }
 
@@ -154,70 +143,6 @@ func (s *Store) Keys() []string {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return slices.Clone(s.cfg.Keys)
-}
-
-func (s *Store) Accounts() []Account {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	return slices.Clone(s.cfg.Accounts)
-}
-
-func (s *Store) FindAccount(identifier string) (Account, bool) {
-	identifier = strings.TrimSpace(identifier)
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	if idx, ok := s.findAccountIndexLocked(identifier); ok {
-		return s.cfg.Accounts[idx], true
-	}
-	return Account{}, false
-}
-
-func (s *Store) UpdateAccountTestStatus(identifier, status string) error {
-	identifier = strings.TrimSpace(identifier)
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	idx, ok := s.findAccountIndexLocked(identifier)
-	if !ok {
-		return errors.New("account not found")
-	}
-	s.setAccountTestStatusLocked(s.cfg.Accounts[idx], status, identifier)
-	return nil
-}
-
-func (s *Store) AccountTestStatus(identifier string) (string, bool) {
-	identifier = strings.TrimSpace(identifier)
-	if identifier == "" {
-		return "", false
-	}
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	status, ok := s.accTest[identifier]
-	return status, ok
-}
-
-func (s *Store) UpdateAccountToken(identifier, token string) error {
-	identifier = strings.TrimSpace(identifier)
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	idx, ok := s.findAccountIndexLocked(identifier)
-	if !ok {
-		return errors.New("account not found")
-	}
-	oldID := s.cfg.Accounts[idx].Identifier()
-	s.cfg.Accounts[idx].Token = token
-	newID := s.cfg.Accounts[idx].Identifier()
-	// Keep historical aliases usable for long-lived queues while also adding
-	// the latest identifier after token refresh.
-	if identifier != "" {
-		s.accMap[identifier] = idx
-	}
-	if oldID != "" {
-		s.accMap[oldID] = idx
-	}
-	if newID != "" {
-		s.accMap[newID] = idx
-	}
-	return s.saveLocked()
 }
 
 func (s *Store) Replace(cfg Config) error {
@@ -252,7 +177,6 @@ func (s *Store) Save() error {
 		return nil
 	}
 	persistCfg := s.cfg.Clone()
-	persistCfg.ClearAccountTokens()
 	b, err := json.MarshalIndent(persistCfg, "", "  ")
 	if err != nil {
 		return err
@@ -270,7 +194,6 @@ func (s *Store) saveLocked() error {
 		return nil
 	}
 	persistCfg := s.cfg.Clone()
-	persistCfg.ClearAccountTokens()
 	b, err := json.MarshalIndent(persistCfg, "", "  ")
 	if err != nil {
 		return err
@@ -300,7 +223,6 @@ func (s *Store) ExportJSONAndBase64() (string, string, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	exportCfg := s.cfg.Clone()
-	exportCfg.ClearAccountTokens()
 	b, err := json.Marshal(exportCfg)
 	if err != nil {
 		return "", "", err

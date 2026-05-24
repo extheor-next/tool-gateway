@@ -33,9 +33,6 @@ func ValidateConfig(c Config) error {
 	if err := ValidateCurrentInputFileConfig(c.CurrentInputFile); err != nil {
 		return err
 	}
-	if err := ValidateAccountProxyReferences(c.Accounts, c.Proxies); err != nil {
-		return err
-	}
 	return nil
 }
 
@@ -65,45 +62,16 @@ func ValidateProxyConfig(proxies []Proxy) error {
 	return nil
 }
 
-func ValidateAccountProxyReferences(accounts []Account, proxies []Proxy) error {
-	if len(accounts) == 0 {
-		return nil
-	}
-	ids := make(map[string]struct{}, len(proxies))
-	for _, proxy := range proxies {
-		ids[NormalizeProxy(proxy).ID] = struct{}{}
-	}
-	for _, acc := range accounts {
-		proxyID := strings.TrimSpace(acc.ProxyID)
-		if proxyID == "" {
-			continue
-		}
-		if _, ok := ids[proxyID]; !ok {
-			return fmt.Errorf("account proxy_id references unknown proxy: %s", proxyID)
-		}
-	}
-	return nil
-}
-
 func ValidateAdminConfig(admin AdminConfig) error {
 	return ValidateIntRange("admin.jwt_expire_hours", admin.JWTExpireHours, 1, 720, false)
 }
 
 func ValidateRuntimeConfig(runtime RuntimeConfig) error {
-	if err := ValidateIntRange("runtime.account_max_inflight", runtime.AccountMaxInflight, 1, 256, false); err != nil {
-		return err
-	}
-	if err := ValidateIntRange("runtime.account_max_queue", runtime.AccountMaxQueue, 1, 200000, false); err != nil {
-		return err
-	}
 	if err := ValidateIntRange("runtime.global_max_inflight", runtime.GlobalMaxInflight, 1, 200000, false); err != nil {
 		return err
 	}
 	if err := ValidateIntRange("runtime.token_refresh_interval_hours", runtime.TokenRefreshIntervalHours, 1, 720, false); err != nil {
 		return err
-	}
-	if runtime.AccountMaxInflight > 0 && runtime.GlobalMaxInflight > 0 && runtime.GlobalMaxInflight < runtime.AccountMaxInflight {
-		return fmt.Errorf("runtime.global_max_inflight must be >= runtime.account_max_inflight")
 	}
 	return nil
 }

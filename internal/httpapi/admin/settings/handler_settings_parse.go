@@ -47,20 +47,6 @@ func parseSettingsUpdateRequest(req map[string]any) (*config.AdminConfig, *confi
 
 	if raw, ok := req["runtime"].(map[string]any); ok {
 		cfg := &config.RuntimeConfig{}
-		if v, exists := raw["account_max_inflight"]; exists {
-			n := intFrom(v)
-			if err := config.ValidateIntRange("runtime.account_max_inflight", n, 1, 256, true); err != nil {
-				return nil, nil, nil, nil, nil, nil, nil, nil, err
-			}
-			cfg.AccountMaxInflight = n
-		}
-		if v, exists := raw["account_max_queue"]; exists {
-			n := intFrom(v)
-			if err := config.ValidateIntRange("runtime.account_max_queue", n, 1, 200000, true); err != nil {
-				return nil, nil, nil, nil, nil, nil, nil, nil, err
-			}
-			cfg.AccountMaxQueue = n
-		}
 		if v, exists := raw["global_max_inflight"]; exists {
 			n := intFrom(v)
 			if err := config.ValidateIntRange("runtime.global_max_inflight", n, 1, 200000, true); err != nil {
@@ -68,17 +54,7 @@ func parseSettingsUpdateRequest(req map[string]any) (*config.AdminConfig, *confi
 			}
 			cfg.GlobalMaxInflight = n
 		}
-		if v, exists := raw["token_refresh_interval_hours"]; exists {
-			n := intFrom(v)
-			if err := config.ValidateIntRange("runtime.token_refresh_interval_hours", n, 1, 720, true); err != nil {
-				return nil, nil, nil, nil, nil, nil, nil, nil, err
-			}
-			cfg.TokenRefreshIntervalHours = n
-		}
-		if cfg.AccountMaxInflight > 0 && cfg.GlobalMaxInflight > 0 && cfg.GlobalMaxInflight < cfg.AccountMaxInflight {
-			return nil, nil, nil, nil, nil, nil, nil, nil, fmt.Errorf("runtime.global_max_inflight must be >= runtime.account_max_inflight")
-		}
-		runtimeCfg = cfg
+			runtimeCfg = cfg
 	}
 
 	if raw, ok := req["responses"].(map[string]any); ok {

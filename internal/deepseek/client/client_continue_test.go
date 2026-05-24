@@ -11,7 +11,6 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"tool-gateway/internal/auth"
 )
 
 type failingDoer struct {
@@ -49,10 +48,8 @@ func TestCallContinuePropagatesPowHeaderToFallbackRequest(t *testing.T) {
 		},
 	}
 
-	resp, err := client.callContinue(context.Background(), &auth.RequestAuth{
-		DeepSeekToken: "token",
-		AccountID:     "acct",
-	}, "session-123", 99, "pow-response-abc")
+	client.deepseekKey = "token"
+	resp, err := client.callContinue(context.Background(), "session-123", 99, "pow-response-abc")
 	if err != nil {
 		t.Fatalf("callContinue returned error: %v", err)
 	}
@@ -97,12 +94,10 @@ func TestCallCompletionAutoContinueThreadsPowHeader(t *testing.T) {
 		},
 	}
 
-	resp, err := client.CallCompletion(context.Background(), &auth.RequestAuth{
-		DeepSeekToken: "token",
-		AccountID:     "acct",
-	}, map[string]any{
+	client.deepseekKey = "token"
+	resp, err := client.CallCompletion(context.Background(), map[string]any{
 		"chat_session_id": "session-123",
-	}, "pow-response-xyz", 1)
+	}, "pow-response-xyz")
 	if err != nil {
 		t.Fatalf("CallCompletion returned error: %v", err)
 	}

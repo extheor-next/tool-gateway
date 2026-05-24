@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"tool-gateway/internal/assistantturn"
-	"tool-gateway/internal/auth"
 	"tool-gateway/internal/chathistory"
 	"tool-gateway/internal/config"
 	"tool-gateway/internal/prompt"
@@ -26,21 +25,20 @@ type Session struct {
 type StartParams struct {
 	Store    *chathistory.Store
 	Request  *http.Request
-	Auth     *auth.RequestAuth
+	CallerID string
 	Surface  string
 	Standard promptcompat.StandardRequest
 }
 
 func Start(params StartParams) *Session {
-	if params.Store == nil || params.Request == nil || params.Auth == nil {
+	if params.Store == nil || params.Request == nil {
 		return nil
 	}
 	if !params.Store.Enabled() || !shouldCapture(params.Request) {
 		return nil
 	}
 	startParams := chathistory.StartParams{
-		CallerID:    strings.TrimSpace(params.Auth.CallerID),
-		AccountID:   strings.TrimSpace(params.Auth.AccountID),
+		CallerID:    strings.TrimSpace(params.CallerID),
 		Surface:     strings.TrimSpace(params.Surface),
 		Model:       strings.TrimSpace(params.Standard.ResponseModel),
 		Stream:      params.Standard.Stream,

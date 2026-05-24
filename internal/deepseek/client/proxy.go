@@ -12,7 +12,6 @@ import (
 
 	"golang.org/x/net/proxy"
 
-	"tool-gateway/internal/auth"
 	"tool-gateway/internal/config"
 	trans "tool-gateway/internal/deepseek/transport"
 )
@@ -101,72 +100,47 @@ func (c *Client) defaultRequestClients() requestClients {
 	}
 }
 
-func (c *Client) resolveProxyForAccount(acc config.Account) (config.Proxy, bool) {
-	if c == nil || c.Store == nil {
-		return config.Proxy{}, false
+// requestClients returns the appropriate HTTP clients, optionally routing
+// through a configured proxy. The proxy config comes from the Client struct.
+func (c *Client) requestClients() requestClients {
+	if c == nil {
+		return requestClients{}
 	}
-	proxyID := strings.TrimSpace(acc.ProxyID)
-	if proxyID == "" {
-		return config.Proxy{}, false
-	}
-	snap := c.Store.Snapshot()
-	for _, proxyCfg := range snap.Proxies {
-		proxyCfg = config.NormalizeProxy(proxyCfg)
-		if proxyCfg.ID == proxyID {
-			return proxyCfg, true
-		}
-	}
-	return config.Proxy{}, false
-}
-
-func (c *Client) requestClientsFromContext(ctx context.Context) requestClients {
-	if a, ok := auth.FromContext(ctx); ok {
-		return c.requestClientsForAccount(a.Account)
-	}
-	return c.defaultRequestClients()
-}
-
-func (c *Client) requestClientsForAuth(ctx context.Context, a *auth.RequestAuth) requestClients {
-	if a != nil {
-		return c.requestClientsForAccount(a.Account)
-	}
-	return c.requestClientsFromContext(ctx)
-}
-
-func (c *Client) requestClientsForAccount(acc config.Account) requestClients {
-	proxyCfg, ok := c.resolveProxyForAccount(acc)
-	if !ok {
+	if c.proxyCfg.Host == "" || c.proxyCfg.Port == 0 {
 		return c.defaultRequestClients()
 	}
+	proxyCfg := config.NormalizeProxy(c.proxyCfg)
 
-	key := proxyCacheKey(proxyCfg)
 	c.proxyClientsMu.RLock()
-	cached, ok := c.proxyClients[key]
+	if c.proxyInit {
+		clients := c.proxyClients
+		c.proxyClientsMu.RUnlock()
+		return clients
+	}
 	c.proxyClientsMu.RUnlock()
-	if ok {
-		return cached
+
+	c.proxyClientsMu.Lock()
+	defer c.proxyClientsMu.Unlock()
+	if c.proxyInit {
+		return c.proxyClients
 	}
 
 	dialContext, err := proxyDialContext(proxyCfg)
 	if err != nil {
 		config.Logger.Warn("[proxy] build dialer failed", "proxy_id", proxyCfg.ID, "error", err)
-		return c.defaultRequestClients()
+		c.proxyClients = c.defaultRequestClients()
+		c.proxyInit = true
+		return c.proxyClients
 	}
 
-	bundle := requestClients{
+	c.proxyClients = requestClients{
 		regular:   trans.NewWithDialContext(60*time.Second, dialContext),
 		stream:    trans.NewWithDialContext(0, dialContext),
 		fallback:  trans.NewFallbackClient(60*time.Second, dialContext),
 		fallbackS: trans.NewFallbackClient(0, dialContext),
 	}
-
-	c.proxyClientsMu.Lock()
-	if c.proxyClients == nil {
-		c.proxyClients = make(map[string]requestClients)
-	}
-	c.proxyClients[key] = bundle
-	c.proxyClientsMu.Unlock()
-	return bundle
+	c.proxyInit = true
+	return c.proxyClients
 }
 
 func applyProxyConnectivityHeaders(req *http.Request) {

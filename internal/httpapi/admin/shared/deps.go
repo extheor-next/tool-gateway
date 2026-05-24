@@ -4,8 +4,6 @@ import (
 	"context"
 	"net/http"
 
-	"tool-gateway/internal/account"
-	"tool-gateway/internal/auth"
 	"tool-gateway/internal/config"
 	dsclient "tool-gateway/internal/deepseek/client"
 )
@@ -13,11 +11,6 @@ import (
 type ConfigStore interface {
 	Snapshot() config.Config
 	Keys() []string
-	Accounts() []config.Account
-	FindAccount(identifier string) (config.Account, bool)
-	UpdateAccountToken(identifier, token string) error
-	UpdateAccountTestStatus(identifier, status string) error
-	AccountTestStatus(identifier string) (string, bool)
 	Update(mutator func(*config.Config) error) error
 	ExportJSONAndBase64() (string, string, error)
 	IsEnvBacked() bool
@@ -28,22 +21,10 @@ type ConfigStore interface {
 	AdminPasswordHash() string
 	AdminJWTExpireHours() int
 	AdminJWTValidAfterUnix() int64
-	RuntimeAccountMaxInflight() int
-	RuntimeAccountMaxQueue(defaultSize int) int
 	RuntimeGlobalMaxInflight(defaultSize int) int
-	RuntimeTokenRefreshIntervalHours() int
 	AutoDeleteMode() string
-	CurrentInputFileEnabled() bool
-	CurrentInputFileMinChars() int
-	ThinkingInjectionEnabled() bool
-	ThinkingInjectionPrompt() string
 	AutoDeleteSessions() bool
-}
-
-type PoolController interface {
-	Reset()
-	Status() map[string]any
-	ApplyRuntimeLimits(maxInflightPerAccount, maxQueueSize, globalMaxInflight int)
+	ModelAliases() map[string]string
 }
 
 type OpenAIChatCaller interface {
@@ -51,14 +32,10 @@ type OpenAIChatCaller interface {
 }
 
 type CompletionBackend interface {
-	Login(ctx context.Context, acc config.Account) (string, error)
-	CreateSession(ctx context.Context, a *auth.RequestAuth, maxAttempts int) (string, error)
-	GetPow(ctx context.Context, a *auth.RequestAuth, maxAttempts int) (string, error)
-	CallCompletion(ctx context.Context, a *auth.RequestAuth, payload map[string]any, powResp string, maxAttempts int) (*http.Response, error)
-	GetSessionCountForToken(ctx context.Context, token string) (*dsclient.SessionStats, error)
-	DeleteAllSessionsForToken(ctx context.Context, token string) error
+	CreateSession(ctx context.Context, maxAttempts int) (string, error)
+	GetPow(ctx context.Context, maxAttempts int) (string, error)
+	CallCompletion(ctx context.Context, payload map[string]any, powResp string) (*http.Response, error)
 }
 
 var _ ConfigStore = (*config.Store)(nil)
-var _ PoolController = (*account.Pool)(nil)
 var _ CompletionBackend = (*dsclient.Client)(nil)

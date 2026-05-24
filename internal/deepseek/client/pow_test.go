@@ -6,7 +6,7 @@ import (
 )
 
 func TestPreloadPowNoOp(t *testing.T) {
-	client := NewClient(nil, nil)
+	client := NewClient("")
 	if err := client.PreloadPow(context.Background()); err != nil {
 		t.Fatalf("PreloadPow should be no-op, got error: %v", err)
 	}

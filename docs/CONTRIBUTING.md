@@ -16,7 +16,7 @@
 
 ```bash
 # 1. 克隆仓库
-git clone https://github.com/CJackHwang/tool-gateway.git
+git clone https://github.com/extheor-next/tool-gateway.git
 cd tool-gateway
 
 # 2. 配置
@@ -108,7 +108,7 @@ npm run build --prefix webui
 
 ## 问题反馈
 
-请使用 [GitHub Issues](https://github.com/CJackHwang/tool-gateway/issues) 并附上：
+请使用 [GitHub Issues](https://github.com/extheor-next/tool-gateway/issues) 并附上：
 
 - 复现步骤
 - 相关日志输出

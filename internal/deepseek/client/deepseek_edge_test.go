@@ -108,14 +108,14 @@ func TestBuildPowHeaderEmptyChallenge(t *testing.T) {
 // ─── NewClient ───────────────────────────────────────────────────────
 
 func TestNewClientInitialState(t *testing.T) {
-	client := NewClient(nil, nil)
+	client := NewClient("")
 	if client == nil {
 		t.Fatal("expected non-nil client")
 	}
 }
 
 func TestNewClientPreloadPowIdempotent(t *testing.T) {
-	client := NewClient(nil, nil)
+	client := NewClient("")
 	if err := client.PreloadPow(context.Background()); err != nil {
 		t.Fatalf("first preload failed: %v", err)
 	}

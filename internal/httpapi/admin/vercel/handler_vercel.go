@@ -143,25 +143,9 @@ func buildVercelParams(teamID string) url.Values {
 }
 
 func (h *Handler) validateAccountsForVercelSync(ctx context.Context, enabled bool) (int, []string) {
-	if !enabled {
-		return 0, nil
-	}
-	validated, failed := 0, []string{}
-	for _, acc := range h.Store.Snapshot().Accounts {
-		if strings.TrimSpace(acc.Token) != "" {
-			continue
-		}
-		token, err := h.Backend.Login(ctx, acc)
-		if err != nil {
-			failed = append(failed, acc.Identifier())
-		} else {
-			validated++
-			_ = h.Store.UpdateAccountToken(acc.Identifier(), token)
-		}
-		time.Sleep(500 * time.Millisecond)
-	}
-	return validated, failed
+	return 0, nil
 }
+
 
 func upsertVercelEnv(ctx context.Context, client *http.Client, projectID string, params url.Values, headers map[string]string, envs []any, key, value string) (int, error) {
 	existingID := findEnvID(envs, key)
@@ -294,8 +278,8 @@ func (h *Handler) exportSyncConfig(req map[string]any) (string, string, error) {
 }
 
 func encodeVercelSyncConfig(cfg config.Config) (string, string, error) {
-	cfg.DropInvalidAccounts()
-	cfg.ClearAccountTokens()
+	// accounts removed
+	// accounts removed
 	cfg.ClearVercelCredentials()
 	cfg.VercelSyncHash = ""
 	cfg.VercelSyncTime = 0
@@ -313,7 +297,7 @@ func syncHashForJSON(s string) string {
 	}
 	cfg.VercelSyncHash = ""
 	cfg.VercelSyncTime = 0
-	cfg.ClearAccountTokens()
+	// accounts removed
 	cfg.ClearVercelCredentials()
 	b, err := json.Marshal(cfg)
 	if err != nil {

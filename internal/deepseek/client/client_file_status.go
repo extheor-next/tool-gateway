@@ -10,7 +10,6 @@ import (
 	"strings"
 	"time"
 
-	"tool-gateway/internal/auth"
 	"tool-gateway/internal/config"
 )
 
@@ -25,7 +24,7 @@ var fileReadySleep = time.Sleep
 // ErrUploadFileNotFound indicates that DeepSeek returned no matching uploaded file.
 var ErrUploadFileNotFound = errors.New("uploaded file not found")
 
-func (c *Client) waitForUploadedFile(ctx context.Context, a *auth.RequestAuth, result *UploadFileResult) error {
+func (c *Client) waitForUploadedFile(ctx context.Context, result *UploadFileResult) error {
 	if result == nil || strings.TrimSpace(result.ID) == "" {
 		return nil
 	}
@@ -45,7 +44,7 @@ func (c *Client) waitForUploadedFile(ctx context.Context, a *auth.RequestAuth, r
 			return fmt.Errorf("waiting for file %s to become ready: %w", result.ID, err)
 		}
 
-		fetched, err := c.FetchUploadedFile(pollCtx, a, result.ID)
+		fetched, err := c.FetchUploadedFile(pollCtx, result.ID)
 		if err == nil && fetched != nil {
 			mergeUploadFileResults(result, fetched)
 			if isReadyUploadFileStatus(result.Status) {
@@ -69,14 +68,14 @@ func (c *Client) waitForUploadedFile(ctx context.Context, a *auth.RequestAuth, r
 }
 
 // FetchUploadedFile returns metadata for an uploaded DeepSeek file by ID.
-func (c *Client) FetchUploadedFile(ctx context.Context, a *auth.RequestAuth, fileID string) (*UploadFileResult, error) {
+func (c *Client) FetchUploadedFile(ctx context.Context, fileID string) (*UploadFileResult, error) {
 	fileID = strings.TrimSpace(fileID)
 	if fileID == "" {
 		return nil, errors.New("file id is required")
 	}
-	clients := c.requestClientsForAuth(ctx, a)
+	clients := c.requestClients()
 	reqURL := dsprotocol.DeepSeekFetchFilesURL + "?file_ids=" + url.QueryEscape(fileID)
-	headers := c.authHeaders(a.DeepSeekToken)
+	headers := c.authHeaders()
 
 	resp, status, err := c.getJSONWithStatus(ctx, clients.regular, reqURL, headers)
 	if err != nil {

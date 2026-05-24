@@ -165,7 +165,6 @@ func TestLowerFunction(t *testing.T) {
 func TestConfigJSONRoundtrip(t *testing.T) {
 	cfg := Config{
 		Keys:         []string{"key1", "key2"},
-		Accounts:     []Account{{Email: "user@example.com", Password: "pass", Token: "tok"}},
 		ModelAliases: map[string]string{"Claude-Sonnet-4-6": "DeepSeek-V4-Flash"},
 		AutoDelete: AutoDeleteConfig{
 			Mode: "single",
@@ -197,9 +196,6 @@ func TestConfigJSONRoundtrip(t *testing.T) {
 
 	if len(decoded.Keys) != 2 || decoded.Keys[0] != "key1" {
 		t.Fatalf("unexpected keys: %#v", decoded.Keys)
-	}
-	if len(decoded.Accounts) != 1 || decoded.Accounts[0].Email != "user@example.com" {
-		t.Fatalf("unexpected accounts: %#v", decoded.Accounts)
 	}
 	if decoded.ModelAliases["claude-sonnet-4-6"] != "deepseek-v4-flash" {
 		t.Fatalf("unexpected normalized model aliases: %#v", decoded.ModelAliases)
@@ -245,7 +241,7 @@ func TestAutoDeleteModeResolution(t *testing.T) {
 }
 
 func TestConfigUnmarshalJSONPreservesUnknownFields(t *testing.T) {
-	raw := `{"keys":["k1"],"accounts":[],"my_custom_field":"hello","number_field":42}`
+	raw := `{"keys":["k1"],"my_custom_field":"hello","number_field":42}`
 	var cfg Config
 	if err := json.Unmarshal([]byte(raw), &cfg); err != nil {
 		t.Fatalf("unmarshal error: %v", err)
@@ -260,7 +256,7 @@ func TestConfigUnmarshalJSONPreservesUnknownFields(t *testing.T) {
 }
 
 func TestConfigUnmarshalJSONIgnoresRemovedLegacyModelMappings(t *testing.T) {
-	raw := `{"keys":["k1"],"accounts":[],"claude_mapping":{"fast":"deepseek-v4-pro"},"claude_model_mapping":{"slow":"deepseek-v4-pro"}}`
+	raw := `{"keys":["k1"],"claude_mapping":{"fast":"deepseek-v4-pro"},"claude_model_mapping":{"slow":"deepseek-v4-pro"}}`
 	var cfg Config
 	if err := json.Unmarshal([]byte(raw), &cfg); err != nil {
 		t.Fatalf("unmarshal error: %v", err)
@@ -299,7 +295,6 @@ func TestConfigUnmarshalJSONIgnoresRemovedHistorySplit(t *testing.T) {
 func TestConfigCloneIsDeepCopy(t *testing.T) {
 	cfg := Config{
 		Keys:             []string{"key1"},
-		Accounts:         []Account{{Email: "user@test.com", Token: "token"}},
 		ModelAliases:     map[string]string{"claude-sonnet-4-6": "deepseek-v4-flash"},
 		AdditionalFields: map[string]any{"custom": "value"},
 	}
@@ -308,15 +303,11 @@ func TestConfigCloneIsDeepCopy(t *testing.T) {
 
 	// Modify original
 	cfg.Keys[0] = "modified"
-	cfg.Accounts[0].Email = "modified@test.com"
 	cfg.ModelAliases["claude-sonnet-4-6"] = "modified-model"
 
 	// Cloned should not be affected
 	if cloned.Keys[0] != "key1" {
 		t.Fatalf("clone keys was affected by original change: %#v", cloned.Keys)
-	}
-	if cloned.Accounts[0].Email != "user@test.com" {
-		t.Fatalf("clone accounts was affected: %#v", cloned.Accounts)
 	}
 	if cloned.ModelAliases["claude-sonnet-4-6"] != "deepseek-v4-flash" {
 		t.Fatalf("clone model aliases was affected: %#v", cloned.ModelAliases)
@@ -325,38 +316,11 @@ func TestConfigCloneIsDeepCopy(t *testing.T) {
 
 func TestConfigCloneNilMaps(t *testing.T) {
 	cfg := Config{
-		Keys:     []string{"k"},
-		Accounts: nil,
+		Keys: []string{"k"},
 	}
 	cloned := cfg.Clone()
 	if len(cloned.Keys) != 1 {
 		t.Fatalf("unexpected keys length: %d", len(cloned.Keys))
-	}
-	if cloned.Accounts != nil {
-		t.Fatalf("expected nil accounts in clone, got %#v", cloned.Accounts)
-	}
-}
-
-// ─── Account.Identifier edge cases ───────────────────────────────────
-
-func TestAccountIdentifierPreferenceMobileOverToken(t *testing.T) {
-	acc := Account{Mobile: "13800138000", Token: "tok"}
-	if acc.Identifier() != "+8613800138000" {
-		t.Fatalf("expected mobile identifier, got %q", acc.Identifier())
-	}
-}
-
-func TestAccountIdentifierPreferenceEmailOverMobile(t *testing.T) {
-	acc := Account{Email: "user@test.com", Mobile: "13800138000"}
-	if acc.Identifier() != "user@test.com" {
-		t.Fatalf("expected email identifier, got %q", acc.Identifier())
-	}
-}
-
-func TestAccountIdentifierEmptyAccount(t *testing.T) {
-	acc := Account{}
-	if acc.Identifier() != "" {
-		t.Fatalf("expected empty identifier for empty account, got %q", acc.Identifier())
 	}
 }
 
@@ -386,7 +350,7 @@ func TestNormalizeConfigInputTrimsWhitespace(t *testing.T) {
 // ─── parseConfigString edge cases ────────────────────────────────────
 
 func TestParseConfigStringPlainJSON(t *testing.T) {
-	cfg, err := parseConfigString(`{"keys":["k1"],"accounts":[]}`)
+	cfg, err := parseConfigString(`{"keys":["k1"]}`)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -396,7 +360,7 @@ func TestParseConfigStringPlainJSON(t *testing.T) {
 }
 
 func TestParseConfigStringBase64Prefix(t *testing.T) {
-	rawJSON := `{"keys":["base64-key"],"accounts":[]}`
+	rawJSON := `{"keys":["base64-key"]}`
 	b64 := base64.StdEncoding.EncodeToString([]byte(rawJSON))
 	cfg, err := parseConfigString("base64:" + b64)
 	if err != nil {
@@ -423,44 +387,8 @@ func TestParseConfigStringEmptyString(t *testing.T) {
 
 // ─── Store methods ───────────────────────────────────────────────────
 
-func TestStoreSnapshotReturnsClone(t *testing.T) {
-	t.Setenv("TOOL_GATEWAY_CONFIG_JSON", `{"keys":["k1"],"accounts":[{"email":"u@test.com","token":"t1"}]}`)
-	store := LoadStore()
-	snap := store.Snapshot()
-	snap.Keys[0] = "modified"
-	if store.Keys()[0] != "k1" {
-		t.Fatal("snapshot modification should not affect store")
-	}
-}
-
-func TestStoreHasAPIKeyMultipleKeys(t *testing.T) {
-	t.Setenv("TOOL_GATEWAY_CONFIG_JSON", `{"keys":["key1","key2","key3"],"accounts":[]}`)
-	store := LoadStore()
-	if !store.HasAPIKey("key1") {
-		t.Fatal("expected key1 found")
-	}
-	if !store.HasAPIKey("key2") {
-		t.Fatal("expected key2 found")
-	}
-	if !store.HasAPIKey("key3") {
-		t.Fatal("expected key3 found")
-	}
-	if store.HasAPIKey("nonexistent") {
-		t.Fatal("expected nonexistent key not found")
-	}
-}
-
-func TestStoreFindAccountNotFound(t *testing.T) {
-	t.Setenv("TOOL_GATEWAY_CONFIG_JSON", `{"keys":["k1"],"accounts":[{"email":"u@test.com"}]}`)
-	store := LoadStore()
-	_, ok := store.FindAccount("nonexistent@test.com")
-	if ok {
-		t.Fatal("expected account not found")
-	}
-}
-
 func TestStoreIgnoresRemovedCompatConfig(t *testing.T) {
-	t.Setenv("TOOL_GATEWAY_CONFIG_JSON", `{"keys":["k1"],"accounts":[],"compat":{"strip_reference_markers":false}}`)
+	t.Setenv("TOOL_GATEWAY_CONFIG_JSON", `{"keys":["k1"],"compat":{"strip_reference_markers":false}}`)
 	store := LoadStore()
 
 	snap := store.Snapshot()
@@ -474,197 +402,6 @@ func TestStoreIgnoresRemovedCompatConfig(t *testing.T) {
 	}
 	if _, ok := out["compat"]; ok {
 		t.Fatalf("expected removed compat field not to marshal, got %#v", out)
-	}
-}
-
-func TestStoreIsEnvBacked(t *testing.T) {
-	t.Setenv("TOOL_GATEWAY_CONFIG_JSON", `{"keys":["k1"],"accounts":[]}`)
-	store := LoadStore()
-	if !store.IsEnvBacked() {
-		t.Fatal("expected env-backed store")
-	}
-}
-
-func TestStoreReplace(t *testing.T) {
-	t.Setenv("TOOL_GATEWAY_CONFIG_JSON", `{"keys":["k1"],"accounts":[]}`)
-	store := LoadStore()
-	newCfg := Config{
-		Keys:     []string{"new-key"},
-		Accounts: []Account{{Email: "new@test.com"}},
-	}
-	if err := store.Replace(newCfg); err != nil {
-		t.Fatalf("replace error: %v", err)
-	}
-	if !store.HasAPIKey("new-key") {
-		t.Fatal("expected new key after replace")
-	}
-	if store.HasAPIKey("k1") {
-		t.Fatal("expected old key removed after replace")
-	}
-}
-
-func TestStoreUpdate(t *testing.T) {
-	t.Setenv("TOOL_GATEWAY_CONFIG_JSON", `{"keys":["k1"],"accounts":[]}`)
-	store := LoadStore()
-	err := store.Update(func(cfg *Config) error {
-		cfg.Keys = append(cfg.Keys, "k2")
-		return nil
-	})
-	if err != nil {
-		t.Fatalf("update error: %v", err)
-	}
-	if !store.HasAPIKey("k2") {
-		t.Fatal("expected k2 after update")
-	}
-}
-
-func TestStoreUpdateReconcilesAPIKeyMutations(t *testing.T) {
-	t.Setenv("TOOL_GATEWAY_CONFIG_JSON", `{
-		"keys":["k1"],
-		"api_keys":[{"key":"k1","name":"primary","remark":"prod"}],
-		"accounts":[]
-	}`)
-	store := LoadStore()
-
-	if err := store.Update(func(cfg *Config) error {
-		cfg.APIKeys = append(cfg.APIKeys, APIKey{Key: "k2", Name: "secondary", Remark: "staging"})
-		return nil
-	}); err != nil {
-		t.Fatalf("add api key failed: %v", err)
-	}
-
-	snap := store.Snapshot()
-	if len(snap.Keys) != 2 || snap.Keys[0] != "k1" || snap.Keys[1] != "k2" {
-		t.Fatalf("unexpected keys after api key add: %#v", snap.Keys)
-	}
-	if len(snap.APIKeys) != 2 {
-		t.Fatalf("unexpected api keys length after add: %#v", snap.APIKeys)
-	}
-	if snap.APIKeys[0].Name != "primary" || snap.APIKeys[0].Remark != "prod" {
-		t.Fatalf("metadata for existing key was lost: %#v", snap.APIKeys[0])
-	}
-	if snap.APIKeys[1].Name != "secondary" || snap.APIKeys[1].Remark != "staging" {
-		t.Fatalf("metadata for new key was lost: %#v", snap.APIKeys[1])
-	}
-
-	if err := store.Update(func(cfg *Config) error {
-		cfg.APIKeys = append([]APIKey(nil), cfg.APIKeys[1:]...)
-		return nil
-	}); err != nil {
-		t.Fatalf("delete api key failed: %v", err)
-	}
-
-	snap = store.Snapshot()
-	if len(snap.Keys) != 1 || snap.Keys[0] != "k2" {
-		t.Fatalf("unexpected keys after api key delete: %#v", snap.Keys)
-	}
-	if len(snap.APIKeys) != 1 || snap.APIKeys[0].Key != "k2" {
-		t.Fatalf("unexpected api keys after delete: %#v", snap.APIKeys)
-	}
-}
-
-func TestStoreUpdateReconcilesLegacyKeyMutations(t *testing.T) {
-	t.Setenv("TOOL_GATEWAY_CONFIG_JSON", `{
-		"keys":["k1"],
-		"api_keys":[{"key":"k1","name":"primary","remark":"prod"}],
-		"accounts":[]
-	}`)
-	store := LoadStore()
-
-	if err := store.Update(func(cfg *Config) error {
-		cfg.Keys = append(cfg.Keys, "k2")
-		return nil
-	}); err != nil {
-		t.Fatalf("legacy key update failed: %v", err)
-	}
-
-	snap := store.Snapshot()
-	if len(snap.Keys) != 2 || snap.Keys[0] != "k1" || snap.Keys[1] != "k2" {
-		t.Fatalf("unexpected keys after legacy update: %#v", snap.Keys)
-	}
-	if len(snap.APIKeys) != 2 {
-		t.Fatalf("unexpected api keys after legacy update: %#v", snap.APIKeys)
-	}
-	if snap.APIKeys[0].Name != "primary" || snap.APIKeys[0].Remark != "prod" {
-		t.Fatalf("metadata for preserved key was lost: %#v", snap.APIKeys[0])
-	}
-	if snap.APIKeys[1].Key != "k2" || snap.APIKeys[1].Name != "" || snap.APIKeys[1].Remark != "" {
-		t.Fatalf("new legacy key should stay metadata-free: %#v", snap.APIKeys[1])
-	}
-}
-
-func TestNormalizeCredentialsPrefersStructuredAPIKeys(t *testing.T) {
-	cfg := Config{
-		Keys: []string{"legacy-key"},
-		APIKeys: []APIKey{
-			{Key: "structured-key", Name: "primary", Remark: "prod"},
-		},
-	}
-	cfg.NormalizeCredentials()
-
-	if len(cfg.Keys) != 1 || cfg.Keys[0] != "structured-key" {
-		t.Fatalf("unexpected normalized keys: %#v", cfg.Keys)
-	}
-	if len(cfg.APIKeys) != 1 {
-		t.Fatalf("unexpected normalized api keys: %#v", cfg.APIKeys)
-	}
-	if cfg.APIKeys[0].Key != "structured-key" || cfg.APIKeys[0].Name != "primary" || cfg.APIKeys[0].Remark != "prod" {
-		t.Fatalf("unexpected structured api key metadata: %#v", cfg.APIKeys[0])
-	}
-}
-
-func TestStoreModelAliasesIncludesDefaultsAndOverrides(t *testing.T) {
-	t.Setenv("TOOL_GATEWAY_CONFIG_JSON", `{"keys":[],"accounts":[],"model_aliases":{"claude-opus-4-6":"deepseek-v4-pro-search"}}`)
-	store := LoadStore()
-	aliases := store.ModelAliases()
-	if aliases["claude-sonnet-4-6"] != "deepseek-v4-flash" {
-		t.Fatalf("expected default alias to remain available, got %q", aliases["claude-sonnet-4-6"])
-	}
-	if aliases["claude-opus-4-6"] != "deepseek-v4-pro-search" {
-		t.Fatalf("expected custom alias override, got %q", aliases["claude-opus-4-6"])
-	}
-}
-
-func TestStoreModelAliasesDefault(t *testing.T) {
-	t.Setenv("TOOL_GATEWAY_CONFIG_JSON", `{"keys":[],"accounts":[]}`)
-	store := LoadStore()
-	aliases := store.ModelAliases()
-	if aliases == nil {
-		t.Fatal("expected non-nil aliases")
-	}
-	if aliases["claude-sonnet-4-6"] != "deepseek-v4-flash" {
-		t.Fatalf("expected built-in alias, got %q", aliases["claude-sonnet-4-6"])
-	}
-}
-
-func TestStoreSetVercelSync(t *testing.T) {
-	t.Setenv("TOOL_GATEWAY_CONFIG_JSON", `{"keys":[],"accounts":[]}`)
-	store := LoadStore()
-	if err := store.SetVercelSync("hash123", 1234567890); err != nil {
-		t.Fatalf("setVercelSync error: %v", err)
-	}
-	snap := store.Snapshot()
-	if snap.VercelSyncHash != "hash123" || snap.VercelSyncTime != 1234567890 {
-		t.Fatalf("unexpected vercel sync: hash=%q time=%d", snap.VercelSyncHash, snap.VercelSyncTime)
-	}
-}
-
-func TestStoreExportJSONAndBase64(t *testing.T) {
-	t.Setenv("TOOL_GATEWAY_CONFIG_JSON", `{"keys":["export-key"],"accounts":[]}`)
-	store := LoadStore()
-	jsonStr, b64Str, err := store.ExportJSONAndBase64()
-	if err != nil {
-		t.Fatalf("export error: %v", err)
-	}
-	if !strings.Contains(jsonStr, "export-key") {
-		t.Fatalf("expected JSON to contain key: %q", jsonStr)
-	}
-	decoded, err := base64.StdEncoding.DecodeString(b64Str)
-	if err != nil {
-		t.Fatalf("base64 decode error: %v", err)
-	}
-	if !strings.Contains(string(decoded), "export-key") {
-		t.Fatalf("expected base64-decoded to contain key: %q", string(decoded))
 	}
 }
 

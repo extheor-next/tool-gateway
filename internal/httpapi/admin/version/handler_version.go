@@ -9,7 +9,7 @@ import (
 	"tool-gateway/internal/version"
 )
 
-const latestReleaseAPI = "https://api.github.com/repos/CJackHwang/tool-gateway/releases/latest"
+const latestReleaseAPI = "https://api.github.com/repos/extheor-next/tool-gateway/releases/latest"
 
 type latestReleasePayload struct {
 	TagName     string `json:"tag_name"`

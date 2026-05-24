@@ -11,7 +11,6 @@ import (
 	"path/filepath"
 	"strings"
 
-	"tool-gateway/internal/auth"
 	"tool-gateway/internal/config"
 	dsclient "tool-gateway/internal/deepseek/client"
 	"tool-gateway/internal/httpapi/openai/shared"
@@ -42,7 +41,6 @@ func (e *inlineFileUploadError) Error() string {
 type inlineUploadState struct {
 	ctx             context.Context
 	handler         *Handler
-	auth            *auth.RequestAuth
 	modelType       string
 	uploadedByID    map[string]string
 	uploadCount     int
@@ -56,7 +54,7 @@ type inlineDecodedFile struct {
 	ReplacementType string
 }
 
-func (h *Handler) PreprocessInlineFileInputs(ctx context.Context, a *auth.RequestAuth, req map[string]any) error {
+func (h *Handler) PreprocessInlineFileInputs(ctx context.Context, req map[string]any) error {
 	if h == nil || h.Backend == nil || len(req) == 0 {
 		return nil
 	}
@@ -71,7 +69,6 @@ func (h *Handler) PreprocessInlineFileInputs(ctx context.Context, a *auth.Reques
 	state := &inlineUploadState{
 		ctx:          ctx,
 		handler:      h,
-		auth:         a,
 		modelType:    modelType,
 		uploadedByID: map[string]string{},
 	}
@@ -182,7 +179,7 @@ func (s *inlineUploadState) uploadInlineFile(file inlineDecodedFile) (string, er
 	if contentType == "" {
 		contentType = http.DetectContentType(file.Data)
 	}
-	result, err := s.handler.Backend.UploadFile(s.ctx, s.auth, dsclient.UploadFileRequest{
+	result, err := s.handler.Backend.UploadFile(s.ctx, dsclient.UploadFileRequest{
 		Filename:    file.Filename,
 		ContentType: contentType,
 		ModelType:   s.modelType,

@@ -9,7 +9,7 @@ import (
 )
 
 func TestAPIRoutesRemainRegistered(t *testing.T) {
-	t.Setenv("TOOL_GATEWAY_CONFIG_JSON", `{"keys":["k1"],"accounts":[{"email":"u@example.com","password":"p"}]}`)
+	t.Setenv("TOOL_GATEWAY_CONFIG_JSON", `{"keys":["k1"]}`)
 	t.Setenv("TOOL_GATEWAY_ENV_WRITEBACK", "0")
 
 	app, err := NewApp()
@@ -74,17 +74,7 @@ func TestAPIRoutesRemainRegistered(t *testing.T) {
 		"PUT /admin/proxies/{proxyID}",
 		"DELETE /admin/proxies/{proxyID}",
 		"POST /admin/proxies/test",
-		"GET /admin/accounts",
-		"POST /admin/accounts",
-		"PUT /admin/accounts/{identifier}",
-		"DELETE /admin/accounts/{identifier}",
-		"PUT /admin/accounts/{identifier}/proxy",
-		"GET /admin/queue/status",
-		"POST /admin/accounts/test",
-		"POST /admin/accounts/test-all",
-		"POST /admin/accounts/sessions/delete-all",
 		"POST /admin/import",
-		"POST /admin/test",
 		"POST /admin/dev/raw-samples/capture",
 		"GET /admin/dev/raw-samples/query",
 		"POST /admin/dev/raw-samples/save",
