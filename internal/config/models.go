@@ -87,7 +87,7 @@ var ClaudeModels = appendNoThinkingVariants(claudeBaseModels)
 func GetModelConfig(model string) (thinking bool, search bool, ok bool) {
 	baseModel, noThinking := splitNoThinkingModel(model)
 	if baseModel == "" {
-		return false, false, false
+		return false, false, true
 	}
 	switch baseModel {
 	case "deepseek-v4-flash", "deepseek-v4-pro", "deepseek-v4-vision":
@@ -95,7 +95,8 @@ func GetModelConfig(model string) (thinking bool, search bool, ok bool) {
 	case "deepseek-v4-flash-search", "deepseek-v4-pro-search":
 		return !noThinking, true, true
 	default:
-		return false, false, false
+		// Unknown model: pass through with defaults (no thinking injection / no search override)
+		return false, false, true
 	}
 }
 
@@ -109,7 +110,7 @@ func GetModelType(model string) (modelType string, ok bool) {
 	case "deepseek-v4-vision":
 		return "vision", true
 	default:
-		return "", false
+		return "default", true
 	}
 }
 
@@ -233,17 +234,16 @@ func ResolveModel(store ModelAliasReader, requested string) (string, bool) {
 		return "", false
 	}
 	aliases := loadModelAliases(store)
-	if IsSupportedDeepSeekModel(model) {
-		return model, true
-	}
-	if mapped, ok := aliases[model]; ok && IsSupportedDeepSeekModel(mapped) {
+	// Check aliases first
+	if mapped, ok := aliases[model]; ok {
 		return mapped, true
 	}
 	baseModel, noThinking := splitNoThinkingModel(model)
-	if mapped, ok := aliases[baseModel]; ok && IsSupportedDeepSeekModel(mapped) {
+	if mapped, ok := aliases[baseModel]; ok {
 		return withNoThinkingVariant(mapped, noThinking), true
 	}
-	return "", false
+	// For Tool Gateway, accept any model and pass it through to the provider
+	return model, true
 }
 
 func lower(s string) string {

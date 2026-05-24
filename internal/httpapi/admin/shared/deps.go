@@ -25,6 +25,8 @@ type ConfigStore interface {
 	AutoDeleteMode() string
 	AutoDeleteSessions() bool
 	ModelAliases() map[string]string
+	ExternalAI() config.ExternalAIConfig
+	ExternalAIProviders() config.ExternalAIProvidersConfig
 }
 
 type OpenAIChatCaller interface {

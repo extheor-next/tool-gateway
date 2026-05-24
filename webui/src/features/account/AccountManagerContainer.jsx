@@ -89,12 +89,16 @@ export default function AccountManagerContainer({ config, onRefresh, onMessage, 
     const openAddProvider = () => {
         setEditingProvider(null)
         setProviderForm(providerToForm(null))
+        setProviderModels([])
+        prevFetchRef.current = ''
         setProviderModalOpen(true)
     }
 
     const openEditProvider = (item) => {
         setEditingProvider(item)
         setProviderForm(providerToForm(item))
+        setProviderModels([])
+        prevFetchRef.current = ''
         setProviderModalOpen(true)
     }
 
@@ -103,6 +107,7 @@ export default function AccountManagerContainer({ config, onRefresh, onMessage, 
         setEditingProvider(null)
         setProviderForm(providerToForm(null))
         setProviderModels([])
+        prevFetchRef.current = ''
     }
 
     const setProviderFieldLocal = (field, value) => {
@@ -110,6 +115,8 @@ export default function AccountManagerContainer({ config, onRefresh, onMessage, 
     }
 
     const prevFetchRef = useRef('')
+    const apiFetchRef = useRef(apiFetch)
+    apiFetchRef.current = apiFetch
 
     useEffect(() => {
         if (!providerModalOpen) return
@@ -119,7 +126,8 @@ export default function AccountManagerContainer({ config, onRefresh, onMessage, 
             setProviderModels([])
             return
         }
-        const fetchKey = baseURL + '|' + apiKey
+        const providerID = editingProvider?.id || ''
+        const fetchKey = baseURL + '|' + apiKey + '|' + providerID
         if (fetchKey === prevFetchRef.current) return
         prevFetchRef.current = fetchKey
         setProviderModels([])
@@ -127,10 +135,10 @@ export default function AccountManagerContainer({ config, onRefresh, onMessage, 
         const timer = setTimeout(async () => {
             setFetchingModels(true)
             try {
-                const res = await apiFetch('/admin/providers/preview-models', {
+                const res = await apiFetchRef.current('/admin/providers/preview-models', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ base_url: baseURL, api_key: apiKey }),
+                    body: JSON.stringify({ base_url: baseURL, api_key: apiKey, provider_id: providerID }),
                 })
                 const data = await res.json()
                 if (data?.data && Array.isArray(data.data)) {
@@ -146,12 +154,19 @@ export default function AccountManagerContainer({ config, onRefresh, onMessage, 
         }, 600)
 
         return () => clearTimeout(timer)
-    }, [providerForm.base_url, providerForm.api_key, providerModalOpen, apiFetch])
+    }, [providerForm.base_url, providerForm.api_key, providerModalOpen, editingProvider?.id])
 
     const saveProviders = async () => {
         const current = Array.isArray(providersConfig.providers) ? providersConfig.providers : []
         const nextProviders = current.filter(item => item.id !== providerForm.id)
         const nextItem = formToProvider(providerForm, editingProvider || {})
+        // Preserve existing API key when editing and user didn't enter a new one
+        if (editingProvider && !providerForm.api_key) {
+            if (editingProvider.has_api_key || editingProvider.api_key_preview) {
+                nextItem.has_api_key = true
+                nextItem.api_key_preview = editingProvider.api_key_preview || ''
+            }
+        }
         nextProviders.push(nextItem)
         const payload = {
             external_ai_providers: {

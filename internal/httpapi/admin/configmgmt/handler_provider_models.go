@@ -10,8 +10,9 @@ import (
 
 func (h *Handler) previewProviderModels(w http.ResponseWriter, r *http.Request) {
 	var req struct {
-		BaseURL string `json:"base_url"`
-		APIKey  string `json:"api_key"`
+		BaseURL    string `json:"base_url"`
+		APIKey     string `json:"api_key"`
+		ProviderID string `json:"provider_id"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]any{"detail": "invalid json"})
@@ -23,7 +24,26 @@ func (h *Handler) previewProviderModels(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	models, err := h.fetchModels(baseURL, req.APIKey)
+	apiKey := req.APIKey
+	// If editing an existing provider with a stored key, use that key
+	if apiKey == "" && req.ProviderID != "" {
+		providers := h.Store.ExternalAIProviders()
+		for _, p := range providers.Providers {
+			if p.ID == req.ProviderID && p.APIKey != "" {
+				apiKey = p.APIKey
+				break
+			}
+		}
+		// Fallback: check legacy external_ai if it matches
+		if apiKey == "" {
+			extAI := h.Store.ExternalAI()
+			if strings.TrimSpace(extAI.APIKey) != "" {
+				apiKey = extAI.APIKey
+			}
+		}
+	}
+
+	models, err := fetchModels(baseURL, apiKey)
 	if err != nil {
 		writeJSON(w, http.StatusBadGateway, map[string]any{"detail": err.Error()})
 		return
@@ -31,7 +51,7 @@ func (h *Handler) previewProviderModels(w http.ResponseWriter, r *http.Request) 
 	writeJSON(w, http.StatusOK, models)
 }
 
-func (h *Handler) fetchModels(baseURL, apiKey string) (map[string]any, error) {
+func fetchModels(baseURL, apiKey string) (map[string]any, error) {
 	client := &http.Client{Timeout: 15 * time.Second}
 	url := strings.TrimSuffix(baseURL, "/") + "/models"
 	req, err := http.NewRequest(http.MethodGet, url, nil)
