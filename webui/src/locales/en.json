@@ -464,6 +464,9 @@
             "openai": "OpenAI",
             "claude": "Claude",
             "gemini": "Gemini"
-        }
+        },
+        "fetchModels": "Fetch models",
+        "selectModel": "-- Select a model --",
+        "fetchingModels": "Fetching models..."
     }
 }

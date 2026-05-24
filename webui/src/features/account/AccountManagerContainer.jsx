@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 
 import { useI18n } from '../../i18n'
 import { useAccountActions } from './useAccountActions'
@@ -53,6 +53,8 @@ export default function AccountManagerContainer({ config, onRefresh, onMessage, 
     const [providerModalOpen, setProviderModalOpen] = useState(false)
     const [editingProvider, setEditingProvider] = useState(null)
     const [providerForm, setProviderForm] = useState(providerToForm(null))
+    const [providerModels, setProviderModels] = useState([])
+    const [fetchingModels, setFetchingModels] = useState(false)
 
     const {
         showAddKey,
@@ -100,11 +102,51 @@ export default function AccountManagerContainer({ config, onRefresh, onMessage, 
         setProviderModalOpen(false)
         setEditingProvider(null)
         setProviderForm(providerToForm(null))
+        setProviderModels([])
     }
 
     const setProviderFieldLocal = (field, value) => {
         setProviderForm(prev => ({ ...prev, [field]: value }))
     }
+
+    const prevFetchRef = useRef('')
+
+    useEffect(() => {
+        if (!providerModalOpen) return
+        const baseURL = String(providerForm.base_url || '').trim()
+        const apiKey = String(providerForm.api_key || '').trim()
+        if (!baseURL) {
+            setProviderModels([])
+            return
+        }
+        const fetchKey = baseURL + '|' + apiKey
+        if (fetchKey === prevFetchRef.current) return
+        prevFetchRef.current = fetchKey
+        setProviderModels([])
+
+        const timer = setTimeout(async () => {
+            setFetchingModels(true)
+            try {
+                const res = await apiFetch('/admin/providers/preview-models', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ base_url: baseURL, api_key: apiKey }),
+                })
+                const data = await res.json()
+                if (data?.data && Array.isArray(data.data)) {
+                    setProviderModels(data.data.map(m => String(m?.id || '').trim()).filter(Boolean))
+                } else {
+                    setProviderModels([])
+                }
+            } catch (_e) {
+                setProviderModels([])
+            } finally {
+                setFetchingModels(false)
+            }
+        }, 600)
+
+        return () => clearTimeout(timer)
+    }, [providerForm.base_url, providerForm.api_key, providerModalOpen, apiFetch])
 
     const saveProviders = async () => {
         const current = Array.isArray(providersConfig.providers) ? providersConfig.providers : []
@@ -236,7 +278,25 @@ export default function AccountManagerContainer({ config, onRefresh, onMessage, 
                             </div>
                             <div>
                                 <label className="block text-sm font-medium mb-1.5">{t('providerManager.modelLabel')}</label>
-                                <input className="input-field" placeholder="gpt-4o-mini" value={providerForm.model} onChange={e => setProviderFieldLocal('model', e.target.value)} />
+                                {fetchingModels ? (
+                                    <div className="input-field flex items-center gap-2 text-muted-foreground text-sm">
+                                        <span className="inline-block w-3 h-3 border-2 border-muted-foreground/30 border-t-muted-foreground rounded-full animate-spin" />
+                                        {t('providerManager.fetchingModels')}
+                                    </div>
+                                ) : providerModels.length > 0 ? (
+                                    <select
+                                        className="input-field"
+                                        value={providerForm.model}
+                                        onChange={e => setProviderFieldLocal('model', e.target.value)}
+                                    >
+                                        <option value="">{t('providerManager.selectModel')}</option>
+                                        {providerModels.map(m => (
+                                            <option key={m} value={m}>{m}</option>
+                                        ))}
+                                    </select>
+                                ) : (
+                                    <input className="input-field" placeholder="gpt-4o-mini" value={providerForm.model} onChange={e => setProviderFieldLocal('model', e.target.value)} />
+                                )}
                             </div>
                             <div>
                                 <label className="block text-sm font-medium mb-1.5">{t('providerManager.modeLabel')}</label>

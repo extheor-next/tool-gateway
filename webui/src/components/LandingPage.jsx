@@ -95,7 +95,7 @@ const LandingPage = ({ onEnter }) => {
                 <header className="mb-12">
                     <h1 className="logo-text">Tool Gateway</h1>
                     <p className="text-gray-400 text-xl max-w-2xl mx-auto leading-relaxed">
-                        DeepSeek to OpenAI & Claude Compatible API Interface
+                        AI Tool Calling Gateway
                     </p>
                 </header>
 

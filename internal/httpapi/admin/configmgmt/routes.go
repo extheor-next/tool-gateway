@@ -16,6 +16,7 @@ func RegisterRoutes(r chi.Router, h *Handler) {
 	r.Put("/keys/{key}", h.updateKey)
 	r.Delete("/keys/{key}", h.deleteKey)
 	r.Post("/import", h.batchImport)
+	r.Post("/providers/preview-models", h.previewProviderModels)
 }
 
 func (h *Handler) GetConfig(w http.ResponseWriter, r *http.Request)    { h.getConfig(w, r) }
