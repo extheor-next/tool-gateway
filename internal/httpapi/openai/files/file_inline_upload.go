@@ -54,8 +54,15 @@ type inlineDecodedFile struct {
 	ReplacementType string
 }
 
+type inlineFileInputPreserver interface {
+	PreserveInlineFileInputs() bool
+}
+
 func (h *Handler) PreprocessInlineFileInputs(ctx context.Context, req map[string]any) error {
 	if h == nil || h.Backend == nil || len(req) == 0 {
+		return nil
+	}
+	if preserver, ok := h.Backend.(inlineFileInputPreserver); ok && preserver.PreserveInlineFileInputs() {
 		return nil
 	}
 	modelType := "default"

@@ -5,11 +5,8 @@ import (
 	"net/http"
 	"testing"
 
-	"tool-gateway/internal/account"
-	"tool-gateway/internal/auth"
 	"tool-gateway/internal/config"
 	dsclient "tool-gateway/internal/deepseek/client"
-	adminaccounts "tool-gateway/internal/httpapi/admin/accounts"
 	adminconfig "tool-gateway/internal/httpapi/admin/configmgmt"
 	adminsettings "tool-gateway/internal/httpapi/admin/settings"
 	adminshared "tool-gateway/internal/httpapi/admin/shared"
@@ -17,7 +14,6 @@ import (
 
 var intFrom = adminshared.IntFrom
 
-func toAccount(m map[string]any) config.Account { return adminshared.ToAccount(m) }
 func fieldString(m map[string]any, key string) string {
 	return adminshared.FieldString(m, key)
 }
@@ -28,10 +24,7 @@ func newAdminTestHandler(t *testing.T, raw string) *Handler {
 	t.Helper()
 	t.Setenv("TOOL_GATEWAY_CONFIG_JSON", raw)
 	store := config.LoadStore()
-	return &Handler{
-		Store: store,
-		Pool:  account.NewPool(store),
-	}
+	return &Handler{Store: store}
 }
 
 type testingBackendMock struct {
@@ -43,23 +36,15 @@ type testingBackendMock struct {
 	deleteAllCalls             int
 }
 
-func (m *testingBackendMock) Login(_ context.Context, _ config.Account) (string, error) {
-	m.loginCalls++
-	if m.loginToken == "" {
-		return "token", nil
-	}
-	return m.loginToken, nil
-}
-
-func (m *testingBackendMock) CreateSession(_ context.Context, _ *auth.RequestAuth, _ int) (string, error) {
+func (m *testingBackendMock) CreateSession(_ context.Context, _ int) (string, error) {
 	return "session-id", nil
 }
 
-func (m *testingBackendMock) GetPow(_ context.Context, _ *auth.RequestAuth, _ int) (string, error) {
+func (m *testingBackendMock) GetPow(_ context.Context, _ int) (string, error) {
 	return "pow", nil
 }
 
-func (m *testingBackendMock) CallCompletion(_ context.Context, _ *auth.RequestAuth, _ map[string]any, _ string, _ int) (*http.Response, error) {
+func (m *testingBackendMock) CallCompletion(_ context.Context, _ map[string]any, _ string) (*http.Response, error) {
 	return &http.Response{StatusCode: http.StatusOK, Body: http.NoBody}, nil
 }
 
@@ -83,11 +68,11 @@ func (m *testingBackendMock) GetSessionCountForToken(_ context.Context, _ string
 }
 
 func (h *Handler) configHandler() *adminconfig.Handler {
-	return &adminconfig.Handler{Store: h.Store, Pool: h.Pool, Backend: h.Backend, OpenAI: h.OpenAI, ChatHistory: h.ChatHistory}
+	return &adminconfig.Handler{Store: h.Store, Backend: h.Backend, OpenAI: h.OpenAI, ChatHistory: h.ChatHistory}
 }
 
 func (h *Handler) settingsHandler() *adminsettings.Handler {
-	return &adminsettings.Handler{Store: h.Store, Pool: h.Pool, Backend: h.Backend, OpenAI: h.OpenAI, ChatHistory: h.ChatHistory}
+	return &adminsettings.Handler{Store: h.Store, Backend: h.Backend, OpenAI: h.OpenAI, ChatHistory: h.ChatHistory}
 }
 
 func (h *Handler) getConfig(w http.ResponseWriter, r *http.Request) {
@@ -116,8 +101,4 @@ func (h *Handler) updateSettings(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) updateSettingsPassword(w http.ResponseWriter, r *http.Request) {
 	h.settingsHandler().UpdateSettingsPassword(w, r)
-}
-
-func runAccountTestsConcurrently(accounts []config.Account, maxConcurrency int, testFn func(int, config.Account) map[string]any) []map[string]any {
-	return adminaccounts.RunAccountTestsConcurrently(accounts, maxConcurrency, testFn)
 }

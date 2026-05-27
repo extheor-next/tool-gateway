@@ -10,7 +10,6 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"tool-gateway/internal/account"
 	"tool-gateway/internal/config"
 )
 
@@ -18,10 +17,7 @@ func newAdminProxyTestHandler(t *testing.T, raw string) *Handler {
 	t.Helper()
 	t.Setenv("TOOL_GATEWAY_CONFIG_JSON", raw)
 	store := config.LoadStore()
-	return &Handler{
-		Store: store,
-		Pool:  account.NewPool(store),
-	}
+	return &Handler{Store: store}
 }
 
 func TestAddProxyPersistsNormalizedProxy(t *testing.T) {
@@ -98,10 +94,9 @@ func TestAddProxyDoesNotFailOnUnrelatedInvalidRuntimeConfig(t *testing.T) {
 	}
 }
 
-func TestDeleteProxyClearsAssignedAccountProxyID(t *testing.T) {
+func TestDeleteProxyRemovesProxy(t *testing.T) {
 	h := newAdminProxyTestHandler(t, `{
-		"proxies":[{"id":"proxy-1","name":"Node 1","type":"socks5","host":"127.0.0.1","port":1080}],
-		"accounts":[{"email":"u@example.com","password":"pwd","proxy_id":"proxy-1"}]
+		"proxies":[{"id":"proxy-1","name":"Node 1","type":"socks5","host":"127.0.0.1","port":1080}]
 	}`)
 
 	r := chi.NewRouter()
@@ -117,12 +112,6 @@ func TestDeleteProxyClearsAssignedAccountProxyID(t *testing.T) {
 	snap := h.Store.Snapshot()
 	if len(snap.Proxies) != 0 {
 		t.Fatalf("expected proxy removed, got %#v", snap.Proxies)
-	}
-	if len(snap.Accounts) != 1 {
-		t.Fatalf("expected account kept, got %#v", snap.Accounts)
-	}
-	if snap.Accounts[0].ProxyID != "" {
-		t.Fatalf("expected proxy assignment cleared, got %#v", snap.Accounts[0])
 	}
 }
 
@@ -157,31 +146,6 @@ func TestUpdateProxyResponseDoesNotExposeStoredPassword(t *testing.T) {
 	}
 	if hasPassword, _ := proxy["has_password"].(bool); !hasPassword {
 		t.Fatalf("expected has_password=true, got %#v", proxy)
-	}
-}
-
-func TestUpdateAccountProxyAssignsProxyID(t *testing.T) {
-	h := newAdminProxyTestHandler(t, `{
-		"proxies":[{"id":"proxy-1","name":"Node 1","type":"socks5h","host":"127.0.0.1","port":1080}],
-		"accounts":[{"email":"u@example.com","password":"pwd"}]
-	}`)
-
-	r := chi.NewRouter()
-	r.Put("/admin/accounts/{identifier}/proxy", h.updateAccountProxy)
-
-	req := httptest.NewRequest(http.MethodPut, "/admin/accounts/u@example.com/proxy", bytes.NewBufferString(`{"proxy_id":"proxy-1"}`))
-	rec := httptest.NewRecorder()
-	r.ServeHTTP(rec, req)
-
-	if rec.Code != http.StatusOK {
-		t.Fatalf("unexpected status: %d body=%s", rec.Code, rec.Body.String())
-	}
-	acc, ok := h.Store.FindAccount("u@example.com")
-	if !ok {
-		t.Fatal("expected account")
-	}
-	if acc.ProxyID != "proxy-1" {
-		t.Fatalf("expected proxy assigned, got %#v", acc)
 	}
 }
 

@@ -19,26 +19,12 @@ import (
 type managedFilesAuthStub struct{}
 
 func (managedFilesAuthStub) Determine(_ *http.Request) (*auth.RequestAuth, error) {
-	return &auth.RequestAuth{
-		UseConfigToken: true,
-		DeepSeekToken:  "managed-token",
-		CallerID:       "caller:test",
-		AccountID:      "acct-123",
-		TriedAccounts:  map[string]bool{},
-	}, nil
+	return &auth.RequestAuth{CallerID: "caller:test"}, nil
 }
 
 func (managedFilesAuthStub) DetermineCaller(_ *http.Request) (*auth.RequestAuth, error) {
-	return &auth.RequestAuth{
-		UseConfigToken: true,
-		DeepSeekToken:  "managed-token",
-		CallerID:       "caller:test",
-		AccountID:      "acct-123",
-		TriedAccounts:  map[string]bool{},
-	}, nil
+	return &auth.RequestAuth{CallerID: "caller:test"}, nil
 }
-
-func (managedFilesAuthStub) Release(_ *auth.RequestAuth) {}
 
 type filesRouteDSStub struct {
 	lastReq dsclient.UploadFileRequest
@@ -47,15 +33,15 @@ type filesRouteDSStub struct {
 	err     error
 }
 
-func (m *filesRouteDSStub) CreateSession(_ context.Context, _ *auth.RequestAuth, _ int) (string, error) {
+func (m *filesRouteDSStub) CreateSession(_ context.Context, _ int) (string, error) {
 	return "", nil
 }
 
-func (m *filesRouteDSStub) GetPow(_ context.Context, _ *auth.RequestAuth, _ int) (string, error) {
+func (m *filesRouteDSStub) GetPow(_ context.Context, _ int) (string, error) {
 	return "", nil
 }
 
-func (m *filesRouteDSStub) UploadFile(_ context.Context, _ *auth.RequestAuth, req dsclient.UploadFileRequest, _ int) (*dsclient.UploadFileResult, error) {
+func (m *filesRouteDSStub) UploadFile(_ context.Context, req dsclient.UploadFileRequest, _ int) (*dsclient.UploadFileResult, error) {
 	m.lastReq = req
 	if m.err != nil {
 		return nil, m.err
@@ -66,7 +52,7 @@ func (m *filesRouteDSStub) UploadFile(_ context.Context, _ *auth.RequestAuth, re
 	return &dsclient.UploadFileResult{ID: "file-123", Filename: req.Filename, Bytes: int64(len(req.Data)), Purpose: req.Purpose, Status: "uploaded"}, nil
 }
 
-func (m *filesRouteDSStub) FetchUploadedFile(_ context.Context, _ *auth.RequestAuth, fileID string) (*dsclient.UploadFileResult, error) {
+func (m *filesRouteDSStub) FetchUploadedFile(_ context.Context, fileID string) (*dsclient.UploadFileResult, error) {
 	if m.err != nil {
 		return nil, m.err
 	}
@@ -76,15 +62,15 @@ func (m *filesRouteDSStub) FetchUploadedFile(_ context.Context, _ *auth.RequestA
 	return &dsclient.UploadFileResult{ID: fileID, Filename: "notes.txt", Bytes: 11, Purpose: "assistants", Status: "processed"}, nil
 }
 
-func (m *filesRouteDSStub) CallCompletion(_ context.Context, _ *auth.RequestAuth, _ map[string]any, _ string, _ int) (*http.Response, error) {
+func (m *filesRouteDSStub) CallCompletion(_ context.Context, _ map[string]any, _ string) (*http.Response, error) {
 	return nil, errors.New("not implemented")
 }
 
-func (m *filesRouteDSStub) DeleteSessionForToken(_ context.Context, _ string, _ string) (*dsclient.DeleteSessionResult, error) {
+func (m *filesRouteDSStub) DeleteSession(_ context.Context, _ string, _ int) (*dsclient.DeleteSessionResult, error) {
 	return &dsclient.DeleteSessionResult{Success: true}, nil
 }
 
-func (m *filesRouteDSStub) DeleteAllSessionsForToken(_ context.Context, _ string) error {
+func (m *filesRouteDSStub) DeleteAllSessions(_ context.Context) error {
 	return nil
 }
 
@@ -158,8 +144,8 @@ func TestFilesRouteUploadSuccess(t *testing.T) {
 	}
 }
 
-func TestFilesRouteUploadIncludesAccountIDForManagedAccount(t *testing.T) {
-	ds := &filesRouteDSStub{}
+func TestFilesRouteUploadIncludesCallerID(t *testing.T) {
+	ds := &filesRouteDSStub{upload: &dsclient.UploadFileResult{ID: "file-123", Filename: "notes.txt", Bytes: 11, Purpose: "assistants", Status: "uploaded", CallerID: "caller:test"}}
 	h := &openAITestSurface{Store: mockOpenAIConfig{}, Auth: managedFilesAuthStub{}, Backend: ds}
 	r := chi.NewRouter()
 	registerOpenAITestRoutes(r, h)
@@ -175,8 +161,8 @@ func TestFilesRouteUploadIncludesAccountIDForManagedAccount(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &out); err != nil {
 		t.Fatalf("decode response failed: %v body=%s", err, rec.Body.String())
 	}
-	if out["account_id"] != "acct-123" {
-		t.Fatalf("expected account_id acct-123, got %#v", out["account_id"])
+	if out["caller_id"] != "caller:test" {
+		t.Fatalf("expected caller_id caller:test, got %#v", out["caller_id"])
 	}
 }
 
@@ -187,6 +173,7 @@ func TestFilesRouteRetrieveSuccess(t *testing.T) {
 		Bytes:    11,
 		Purpose:  "assistants",
 		Status:   "processed",
+		CallerID: "caller:test",
 	}}
 	h := &openAITestSurface{Store: mockOpenAIConfig{}, Auth: managedFilesAuthStub{}, Backend: ds}
 	r := chi.NewRouter()
@@ -207,8 +194,8 @@ func TestFilesRouteRetrieveSuccess(t *testing.T) {
 	if out["id"] != "file-123" || out["filename"] != "notes.txt" || out["status"] != "processed" {
 		t.Fatalf("unexpected file object: %#v", out)
 	}
-	if out["account_id"] != "acct-123" {
-		t.Fatalf("expected account_id acct-123, got %#v", out["account_id"])
+	if out["caller_id"] != "caller:test" {
+		t.Fatalf("expected caller_id caller:test, got %#v", out["caller_id"])
 	}
 }
 

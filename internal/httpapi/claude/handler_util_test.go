@@ -209,15 +209,17 @@ func TestNormalizeClaudeMessagesMixedContentBlocks(t *testing.T) {
 	}
 	got := normalizeClaudeMessages(msgs)
 	m := got[0].(map[string]any)
-	content, _ := m["content"].(string)
-	if !containsStr(content, "Hello") || !containsStr(content, "World") || !containsStr(content, `"type":"image"`) {
-		t.Fatalf("expected text plus non-text block marker preserved, got %q", content)
+	content, ok := m["content"].([]any)
+	if !ok || len(content) != 3 {
+		t.Fatalf("expected multimodal content parts, got %#v", m["content"])
 	}
-	if !containsStr(content, omittedBinaryMarker) {
-		t.Fatalf("expected binary payload omitted marker, got %q", content)
+	if content[1].(map[string]any)["type"] != "image_url" {
+		t.Fatalf("expected image block preserved as image_url, got %#v", content)
 	}
-	if containsStr(content, strings.Repeat("A", 100)) {
-		t.Fatalf("expected raw base64 payload not to be included, got %q", content)
+	firstText := content[0].(map[string]any)["text"].(string)
+	lastText := content[2].(map[string]any)["text"].(string)
+	if !containsStr(firstText, "Hello") || !containsStr(lastText, "World") {
+		t.Fatalf("expected text preserved, got %#v", content)
 	}
 }
 

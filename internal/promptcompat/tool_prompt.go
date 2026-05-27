@@ -40,7 +40,7 @@ func injectToolPromptWithDescriptions(messages []map[string]any, tools []any, po
 	if includeDescriptions && parts.Descriptions != "" {
 		toolPrompt = parts.Descriptions + "\n\n" + toolPrompt
 	} else if !includeDescriptions && parts.Descriptions != "" {
-		toolPrompt = "Available tool descriptions and parameter schemas are attached in TOOL_GATEWAY_TOOLS.txt. Treat TOOL_GATEWAY_TOOLS.txt as the authoritative list of callable tools and schemas; use only tools and parameters listed there.\n\n" + toolPrompt
+		toolPrompt = "Available tool descriptions, parameter schemas, and tool-call format rules are attached in TOOL_GATEWAY_TOOLS.txt. Treat TOOL_GATEWAY_TOOLS.txt as the authoritative list of callable tools and schemas; use only tools and parameters listed there. If you call tools, follow the tool-call format rules from TOOL_GATEWAY_TOOLS.txt exactly."
 	}
 
 	for i := range messages {
@@ -108,6 +108,10 @@ func buildToolPromptParts(tools []any, policy ToolChoicePolicy) toolPromptParts 
 }
 
 func BuildOpenAIToolsContextTranscript(toolsRaw any, policy ToolChoicePolicy) (string, []string) {
+	return BuildOpenAIToolsContextTranscriptForMessages(toolsRaw, policy, nil)
+}
+
+func BuildOpenAIToolsContextTranscriptForMessages(toolsRaw any, policy ToolChoicePolicy, messages []any) (string, []string) {
 	if policy.IsNone() {
 		return "", nil
 	}
@@ -115,7 +119,17 @@ func BuildOpenAIToolsContextTranscript(toolsRaw any, policy ToolChoicePolicy) (s
 	if !ok || len(tools) == 0 {
 		return "", nil
 	}
+	compact := false
+	if len(policy.Allowed) == 0 && strings.TrimSpace(latestUserTextForToolSelection(messages)) != "" {
+		if !shouldIncludeToolsForUserText(latestUserTextForToolSelection(messages)) {
+			return "", nil
+		}
+		compact = true
+	}
 	parts := buildToolPromptParts(tools, policy)
+	if compact {
+		parts.Descriptions = buildCompactToolDescriptions(tools, policy)
+	}
 	if strings.TrimSpace(parts.Descriptions) == "" {
 		return "", parts.Names
 	}
@@ -125,8 +139,91 @@ func BuildOpenAIToolsContextTranscript(toolsRaw any, policy ToolChoicePolicy) (s
 	b.WriteString(toolsTranscriptSummary)
 	b.WriteString("\n\n")
 	b.WriteString(parts.Descriptions)
+	if strings.TrimSpace(parts.Instructions) != "" {
+		b.WriteString("\n\n")
+		b.WriteString(parts.Instructions)
+	}
 	b.WriteString("\n")
 	return b.String(), parts.Names
+}
+
+func latestUserTextForToolSelection(messages []any) string {
+	for i := len(messages) - 1; i >= 0; i-- {
+		msg, ok := messages[i].(map[string]any)
+		if !ok || strings.ToLower(strings.TrimSpace(fmt.Sprint(msg["role"]))) != "user" {
+			continue
+		}
+		switch content := msg["content"].(type) {
+		case string:
+			return strings.TrimSpace(content)
+		case []any:
+			parts := make([]string, 0, len(content))
+			for _, raw := range content {
+				part, ok := raw.(map[string]any)
+				if !ok || strings.ToLower(strings.TrimSpace(fmt.Sprint(part["type"]))) != "text" {
+					continue
+				}
+				if text := strings.TrimSpace(fmt.Sprint(part["text"])); text != "" {
+					parts = append(parts, text)
+				}
+			}
+			return strings.Join(parts, "\n")
+		}
+	}
+	return ""
+}
+
+func shouldIncludeToolsForUserText(userText string) bool {
+	query := strings.ToLower(strings.TrimSpace(userText))
+	return query != "" && !isPureImageQuestion(query) && likelyNeedsTool(query)
+}
+
+func buildCompactToolDescriptions(tools []any, policy ToolChoicePolicy) string {
+	lines := make([]string, 0, len(tools))
+	for _, raw := range tools {
+		tool, ok := raw.(map[string]any)
+		if !ok {
+			continue
+		}
+		name, _, schema := toolcall.ExtractToolMeta(tool)
+		name = strings.TrimSpace(name)
+		if name == "" || !policy.Allows(name) {
+			continue
+		}
+		b, _ := json.Marshal(schema)
+		lines = append(lines, fmt.Sprintf("Tool: %s\nParameters: %s", name, string(b)))
+	}
+	if len(lines) == 0 {
+		return ""
+	}
+	return "You have access to these tools:\n\n" + strings.Join(lines, "\n\n")
+}
+
+func isPureImageQuestion(query string) bool {
+	for _, term := range []string{"这是什么", "what is this", "describe image", "描述图片", "看图", "图片"} {
+		if strings.Contains(query, term) {
+			return true
+		}
+	}
+	return false
+}
+
+func likelyNeedsTool(query string) bool {
+	for _, term := range []string{
+		"read", "读取", "查看", "打开", "文件", "file",
+		"grep", "搜索代码", "查找", "search code", "find",
+		"glob", "列出", "匹配", "文件列表",
+		"bash", "运行", "执行", "命令", "command",
+		"edit", "修改", "编辑", "修复", "代码", "code",
+		"write", "写入", "创建", "新建",
+		"web", "search", "搜索", "联网", "url", "网页",
+		"todo", "任务", "计划",
+	} {
+		if strings.Contains(query, term) {
+			return true
+		}
+	}
+	return false
 }
 
 func hasReadLikeTool(names []string) bool {

@@ -9,6 +9,8 @@ const CurrentInputContextFilename = "TOOL_GATEWAY_HISTORY.txt"
 
 const historyTranscriptTitle = "# TOOL_GATEWAY_HISTORY.txt"
 const historyTranscriptSummary = "Prior conversation history and tool progress."
+const historyRecentFullEntries = 6
+const historyOldEntryMaxRunes = 2000
 
 func BuildOpenAIHistoryTranscript(messages []any) string {
 	return buildOpenAIHistoryTranscript(messages)
@@ -37,7 +39,7 @@ func buildOpenAIHistoryTranscript(messages []any) string {
 	b.WriteString(historyTranscriptSummary)
 	b.WriteString("\n\n")
 
-	entry := 0
+	entries := make([]historyEntry, 0, len(messages))
 	for _, raw := range messages {
 		msg, ok := raw.(map[string]any)
 		if !ok {
@@ -48,8 +50,19 @@ func buildOpenAIHistoryTranscript(messages []any) string {
 		if content == "" {
 			continue
 		}
-		entry++
-		fmt.Fprintf(&b, "=== %d. %s ===\n%s\n\n", entry, strings.ToUpper(roleLabelForHistory(role)), content)
+		entries = append(entries, historyEntry{role: role, content: content})
+	}
+
+	fullFrom := len(entries) - historyRecentFullEntries
+	if fullFrom < 0 {
+		fullFrom = 0
+	}
+	for i, entry := range entries {
+		content := entry.content
+		if i < fullFrom {
+			content = compactOldHistoryEntry(content)
+		}
+		fmt.Fprintf(&b, "=== %d. %s ===\n%s\n\n", i+1, strings.ToUpper(roleLabelForHistory(entry.role)), content)
 	}
 
 	transcript := strings.TrimSpace(b.String())
@@ -57,6 +70,22 @@ func buildOpenAIHistoryTranscript(messages []any) string {
 		return ""
 	}
 	return transcript + "\n"
+}
+
+type historyEntry struct {
+	role    string
+	content string
+}
+
+func compactOldHistoryEntry(content string) string {
+	runes := []rune(content)
+	if len(runes) <= historyOldEntryMaxRunes {
+		return content
+	}
+	keepHead := historyOldEntryMaxRunes / 2
+	keepTail := historyOldEntryMaxRunes - keepHead
+	omitted := len(runes) - keepHead - keepTail
+	return string(runes[:keepHead]) + fmt.Sprintf("\n[older large entry truncated: omitted %d chars]\n", omitted) + string(runes[len(runes)-keepTail:])
 }
 
 func buildOpenAIHistoryEntry(role string, msg map[string]any) string {

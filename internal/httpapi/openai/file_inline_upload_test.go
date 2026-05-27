@@ -25,18 +25,18 @@ type inlineUploadBackendStub struct {
 	completionResp *http.Response
 }
 
-func (m *inlineUploadBackendStub) CreateSession(_ context.Context, _ *auth.RequestAuth, _ int) (string, error) {
+func (m *inlineUploadBackendStub) CreateSession(_ context.Context, _ int) (string, error) {
 	if strings.TrimSpace(m.createSession) == "" {
 		return "session-id", nil
 	}
 	return m.createSession, nil
 }
 
-func (m *inlineUploadBackendStub) GetPow(_ context.Context, _ *auth.RequestAuth, _ int) (string, error) {
+func (m *inlineUploadBackendStub) GetPow(_ context.Context, _ int) (string, error) {
 	return "pow", nil
 }
 
-func (m *inlineUploadBackendStub) UploadFile(ctx context.Context, _ *auth.RequestAuth, req dsclient.UploadFileRequest, _ int) (*dsclient.UploadFileResult, error) {
+func (m *inlineUploadBackendStub) UploadFile(ctx context.Context, req dsclient.UploadFileRequest, _ int) (*dsclient.UploadFileResult, error) {
 	m.lastCtx = ctx
 	m.uploadCalls = append(m.uploadCalls, req)
 	if m.uploadErr != nil {
@@ -55,7 +55,7 @@ func (m *inlineUploadBackendStub) UploadFile(ctx context.Context, _ *auth.Reques
 	}, nil
 }
 
-func (m *inlineUploadBackendStub) CallCompletion(_ context.Context, _ *auth.RequestAuth, payload map[string]any, _ string, _ int) (*http.Response, error) {
+func (m *inlineUploadBackendStub) CallCompletion(_ context.Context, payload map[string]any, _ string) (*http.Response, error) {
 	m.completionReq = payload
 	if m.completionResp != nil {
 		return m.completionResp, nil
@@ -66,11 +66,11 @@ func (m *inlineUploadBackendStub) CallCompletion(_ context.Context, _ *auth.Requ
 	), nil
 }
 
-func (m *inlineUploadBackendStub) DeleteSessionForToken(_ context.Context, _ string, _ string) (*dsclient.DeleteSessionResult, error) {
+func (m *inlineUploadBackendStub) DeleteSession(_ context.Context, _ string, _ int) (*dsclient.DeleteSessionResult, error) {
 	return &dsclient.DeleteSessionResult{Success: true}, nil
 }
 
-func (m *inlineUploadBackendStub) DeleteAllSessionsForToken(_ context.Context, _ string) error {
+func (m *inlineUploadBackendStub) DeleteAllSessions(_ context.Context) error {
 	return nil
 }
 
@@ -93,7 +93,7 @@ func TestPreprocessInlineFileInputsReplacesDataURLAndCollectsRefFileIDs(t *testi
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	if err := h.preprocessInlineFileInputs(ctx, &auth.RequestAuth{DeepSeekToken: "token"}, req); err != nil {
+	if err := h.preprocessInlineFileInputs(ctx, &auth.RequestAuth{CallerID: "caller:test"}, req); err != nil {
 		t.Fatalf("preprocess failed: %v", err)
 	}
 	if len(ds.uploadCalls) != 1 {
@@ -142,7 +142,7 @@ func TestPreprocessInlineFileInputsDeduplicatesIdenticalPayloads(t *testing.T) {
 		},
 	}
 
-	if err := h.preprocessInlineFileInputs(context.Background(), &auth.RequestAuth{DeepSeekToken: "token"}, req); err != nil {
+	if err := h.preprocessInlineFileInputs(context.Background(), &auth.RequestAuth{CallerID: "caller:test"}, req); err != nil {
 		t.Fatalf("preprocess failed: %v", err)
 	}
 	if len(ds.uploadCalls) != 1 {
@@ -151,6 +151,49 @@ func TestPreprocessInlineFileInputsDeduplicatesIdenticalPayloads(t *testing.T) {
 	refIDs, _ := req["ref_file_ids"].([]any)
 	if len(refIDs) != 1 || refIDs[0] != "file-inline-1" {
 		t.Fatalf("unexpected ref_file_ids after dedupe: %#v", req["ref_file_ids"])
+	}
+}
+
+type inlinePassthroughBackendStub struct {
+	inlineUploadBackendStub
+}
+
+func (m *inlinePassthroughBackendStub) PreserveInlineFileInputs() bool {
+	return true
+}
+
+func TestChatCompletionsPreservesImageURLForInlinePassthroughBackend(t *testing.T) {
+	ds := &inlinePassthroughBackendStub{}
+	h := &openAITestSurface{Store: mockOpenAIConfig{}, Auth: streamStatusAuthStub{}, Backend: ds}
+	reqBody := `{"model":"kimi-k2.5","messages":[{"role":"user","content":[{"type":"text","text":"hi"},{"type":"image_url","image_url":{"url":"data:image/png;base64,QUJDRA=="}}]}],"stream":false}`
+	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(reqBody))
+	req.Header.Set("Authorization", "Bearer direct-token")
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+
+	h.ChatCompletions(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d body=%s", rec.Code, rec.Body.String())
+	}
+	if len(ds.uploadCalls) != 0 {
+		t.Fatalf("expected image_url passthrough without upload, got %d upload calls", len(ds.uploadCalls))
+	}
+	if ds.completionReq == nil {
+		t.Fatal("expected completion payload to be captured")
+	}
+	messages, _ := ds.completionReq["request_messages"].([]any)
+	if len(messages) != 1 {
+		t.Fatalf("expected one request message, got %#v", ds.completionReq["request_messages"])
+	}
+	message, _ := messages[0].(map[string]any)
+	content, _ := message["content"].([]any)
+	if len(content) != 2 {
+		t.Fatalf("expected two content parts, got %#v", message["content"])
+	}
+	image, _ := content[1].(map[string]any)
+	if image["type"] != "image_url" {
+		t.Fatalf("expected image_url part to be preserved, got %#v", image)
 	}
 }
 

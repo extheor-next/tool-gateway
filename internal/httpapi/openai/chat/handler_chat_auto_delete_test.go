@@ -7,7 +7,6 @@ import (
 	"strings"
 	"testing"
 
-	"tool-gateway/internal/auth"
 	dsclient "tool-gateway/internal/deepseek/client"
 )
 
@@ -19,34 +18,34 @@ type autoDeleteModeDSStub struct {
 	lastCtxErr    error
 }
 
-func (m *autoDeleteModeDSStub) CreateSession(_ context.Context, _ *auth.RequestAuth, _ int) (string, error) {
+func (m *autoDeleteModeDSStub) CreateSession(_ context.Context, _ int) (string, error) {
 	return "session-id", nil
 }
 
-func (m *autoDeleteModeDSStub) GetPow(_ context.Context, _ *auth.RequestAuth, _ int) (string, error) {
+func (m *autoDeleteModeDSStub) GetPow(_ context.Context, _ int) (string, error) {
 	return "pow", nil
 }
 
-func (m *autoDeleteModeDSStub) UploadFile(_ context.Context, _ *auth.RequestAuth, _ dsclient.UploadFileRequest, _ int) (*dsclient.UploadFileResult, error) {
+func (m *autoDeleteModeDSStub) UploadFile(_ context.Context, _ dsclient.UploadFileRequest, _ int) (*dsclient.UploadFileResult, error) {
 	return &dsclient.UploadFileResult{ID: "file-id", Filename: "file.txt", Bytes: 1, Status: "uploaded"}, nil
 }
 
-func (m *autoDeleteModeDSStub) CallCompletion(_ context.Context, _ *auth.RequestAuth, _ map[string]any, _ string, _ int) (*http.Response, error) {
+func (m *autoDeleteModeDSStub) CallCompletion(_ context.Context, _ map[string]any, _ string) (*http.Response, error) {
 	return m.resp, nil
 }
 
-func (m *autoDeleteModeDSStub) DeleteSessionForToken(_ context.Context, _ string, sessionID string) (*dsclient.DeleteSessionResult, error) {
+func (m *autoDeleteModeDSStub) DeleteSession(_ context.Context, sessionID string, _ int) (*dsclient.DeleteSessionResult, error) {
 	m.singleCalls++
 	m.lastSessionID = sessionID
 	return &dsclient.DeleteSessionResult{SessionID: sessionID, Success: true}, nil
 }
 
-func (m *autoDeleteModeDSStub) DeleteAllSessionsForToken(_ context.Context, _ string) error {
+func (m *autoDeleteModeDSStub) DeleteAllSessions(_ context.Context) error {
 	m.allCalls++
 	return nil
 }
 
-func (m *autoDeleteModeDSStub) DeleteSessionForTokenCtx(ctx context.Context, _ string, sessionID string) (*dsclient.DeleteSessionResult, error) {
+func (m *autoDeleteModeDSStub) DeleteSessionCtx(ctx context.Context, sessionID string, _ int) (*dsclient.DeleteSessionResult, error) {
 	m.singleCalls++
 	m.lastSessionID = sessionID
 	m.lastCtxErr = ctx.Err()
@@ -109,11 +108,11 @@ type autoDeleteCtxDSStub struct {
 	autoDeleteModeDSStub
 }
 
-func (m *autoDeleteCtxDSStub) DeleteSessionForToken(ctx context.Context, token string, sessionID string) (*dsclient.DeleteSessionResult, error) {
-	return m.DeleteSessionForTokenCtx(ctx, token, sessionID)
+func (m *autoDeleteCtxDSStub) DeleteSession(ctx context.Context, sessionID string, maxAttempts int) (*dsclient.DeleteSessionResult, error) {
+	return m.DeleteSessionCtx(ctx, sessionID, maxAttempts)
 }
 
-func (m *autoDeleteCtxDSStub) DeleteAllSessionsForToken(_ context.Context, _ string) error {
+func (m *autoDeleteCtxDSStub) DeleteAllSessions(_ context.Context) error {
 	m.allCalls++
 	return nil
 }
@@ -126,11 +125,10 @@ func TestAutoDeleteRemoteSessionIgnoresCanceledParentContext(t *testing.T) {
 		},
 		Backend: ds,
 	}
-	a := &auth.RequestAuth{DeepSeekToken: "token", AccountID: "acct"}
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
-	h.autoDeleteRemoteSession(ctx, a, "session-id")
+	h.autoDeleteRemoteSession(ctx, "session-id")
 
 	if ds.singleCalls != 1 {
 		t.Fatalf("single delete calls=%d want=1", ds.singleCalls)

@@ -88,7 +88,7 @@ func TestBuildOpenAIFinalPrompt_VercelPreparePathKeepsFinalAnswerInstruction(t *
 	}
 }
 
-func TestBuildOpenAIPromptWithToolInstructionsOnlyOmitsSchemas(t *testing.T) {
+func TestBuildOpenAIPromptWithToolInstructionsOnlyOmitsSchemasAndFormatRules(t *testing.T) {
 	messages := []any{
 		map[string]any{"role": "system", "content": "You are helpful"},
 		map[string]any{"role": "user", "content": "请调用工具"},
@@ -113,15 +113,51 @@ func TestBuildOpenAIPromptWithToolInstructionsOnlyOmitsSchemas(t *testing.T) {
 	if strings.Contains(finalPrompt, "You have access to these tools") || strings.Contains(finalPrompt, "Description: search docs") || strings.Contains(finalPrompt, "Parameters:") {
 		t.Fatalf("tool descriptions should be externalized, got: %q", finalPrompt)
 	}
-	if !strings.Contains(finalPrompt, "Treat TOOL_GATEWAY_TOOLS.txt as the authoritative list of callable tools and schemas") {
+	if !strings.Contains(finalPrompt, "TOOL_GATEWAY_TOOLS.txt") {
 		t.Fatalf("expected instructions-only prompt to point model at tools file, got: %q", finalPrompt)
 	}
-	if !strings.Contains(finalPrompt, "TOOL CALL FORMAT") || !strings.Contains(finalPrompt, "Remember: The ONLY valid way to use tools") {
-		t.Fatalf("expected tool format instructions to remain in live prompt, got: %q", finalPrompt)
+	if strings.Contains(finalPrompt, "TOOL CALL FORMAT") || strings.Contains(finalPrompt, "<|DSML|tool_calls>") || strings.Contains(finalPrompt, "Remember: The ONLY valid way to use tools") {
+		t.Fatalf("tool format rules should be externalized, got: %q", finalPrompt)
 	}
 }
 
-func TestBuildOpenAIToolsContextTranscriptContainsOnlyDescriptions(t *testing.T) {
+func TestBuildOpenAIToolsContextTranscriptAutoUsesCompactFullToolsWhenToolsLikelyNeeded(t *testing.T) {
+	tools := []any{
+		map[string]any{"type": "function", "function": map[string]any{"name": "Read", "description": "Read file contents from disk", "parameters": map[string]any{"type": "object"}}},
+		map[string]any{"type": "function", "function": map[string]any{"name": "WebSearch", "description": "Search the web", "parameters": map[string]any{"type": "object"}}},
+		map[string]any{"type": "function", "function": map[string]any{"name": "Edit", "description": "Edit files", "parameters": map[string]any{"type": "object"}}},
+	}
+
+	transcript, toolNames := BuildOpenAIToolsContextTranscriptForMessages(tools, DefaultToolChoicePolicy(), []any{map[string]any{"role": "user", "content": "请读取 internal/main.go 文件"}})
+	if len(toolNames) != 3 {
+		t.Fatalf("expected compact full tools when tools are likely needed, got names=%#v transcript=%q", toolNames, transcript)
+	}
+	for _, want := range []string{"Tool: Read", "Tool: WebSearch", "Tool: Edit"} {
+		if !strings.Contains(transcript, want) {
+			t.Fatalf("expected compact transcript to include %q, got %q", want, transcript)
+		}
+	}
+	if strings.Contains(transcript, "Read file contents from disk") || strings.Contains(transcript, "Search the web") || strings.Contains(transcript, "Edit files") {
+		t.Fatalf("expected compact transcript to omit descriptions, got %q", transcript)
+	}
+}
+
+func TestBuildOpenAIToolsContextTranscriptAutoOmitsToolsForImageQuestion(t *testing.T) {
+	tools := []any{
+		map[string]any{"type": "function", "function": map[string]any{"name": "Read", "description": "Read file contents from disk", "parameters": map[string]any{"type": "object"}}},
+		map[string]any{"type": "function", "function": map[string]any{"name": "WebSearch", "description": "Search the web", "parameters": map[string]any{"type": "object"}}},
+	}
+
+	transcript, toolNames := BuildOpenAIToolsContextTranscriptForMessages(tools, DefaultToolChoicePolicy(), []any{map[string]any{"role": "user", "content": []any{
+		map[string]any{"type": "image_url", "image_url": map[string]any{"url": "data:image/png;base64,aW1hZ2U="}},
+		map[string]any{"type": "text", "text": "这是什么？"},
+	}}})
+	if transcript != "" || len(toolNames) != 0 {
+		t.Fatalf("expected pure image question to omit tools, got names=%#v transcript=%q", toolNames, transcript)
+	}
+}
+
+func TestBuildOpenAIToolsContextTranscriptContainsDescriptionsAndFormatRules(t *testing.T) {
 	tools := []any{
 		map[string]any{
 			"type": "function",
@@ -139,13 +175,10 @@ func TestBuildOpenAIToolsContextTranscriptContainsOnlyDescriptions(t *testing.T)
 	if len(toolNames) != 1 || toolNames[0] != "search" {
 		t.Fatalf("unexpected tool names: %#v", toolNames)
 	}
-	for _, want := range []string{"# TOOL_GATEWAY_TOOLS.txt", "You have access to these tools", "Tool: search", "Description: search docs", `Parameters: {"type":"object"}`} {
+	for _, want := range []string{"# TOOL_GATEWAY_TOOLS.txt", "You have access to these tools", "Tool: search", "Description: search docs", `Parameters: {"type":"object"}`, "TOOL CALL FORMAT", "<|DSML|tool_calls>"} {
 		if !strings.Contains(transcript, want) {
 			t.Fatalf("expected tools transcript to contain %q, got: %q", want, transcript)
 		}
-	}
-	if strings.Contains(transcript, "TOOL CALL FORMAT") || strings.Contains(transcript, "<|DSML|tool_calls>") {
-		t.Fatalf("tools transcript should not duplicate format instructions, got: %q", transcript)
 	}
 }
 

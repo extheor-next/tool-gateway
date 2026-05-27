@@ -20,9 +20,10 @@ import (
 
 type testGeminiConfig struct{}
 
-func (testGeminiConfig) ModelAliases() map[string]string { return nil }
-func (testGeminiConfig) CurrentInputFileEnabled() bool   { return true }
-func (testGeminiConfig) CurrentInputFileMinChars() int   { return 0 }
+func (testGeminiConfig) ModelAliases() map[string]string      { return nil }
+func (testGeminiConfig) CurrentInputFileEnabled() bool        { return true }
+func (testGeminiConfig) CurrentInputFileMinChars() int        { return 0 }
+func (testGeminiConfig) CurrentInputFileMaxKeepMessages() int { return 0 }
 
 type testGeminiAuth struct {
 	a   *auth.RequestAuth
@@ -235,16 +236,19 @@ func TestGeminiCurrentInputFileUploadsToolsSeparately(t *testing.T) {
 		t.Fatalf("history transcript should not embed tool descriptions, got %q", historyText)
 	}
 	toolsText := string(ds.uploadCalls[1].Data)
-	if !strings.Contains(toolsText, "# TOOL_GATEWAY_TOOLS.txt") || !strings.Contains(toolsText, "Tool: eval_javascript") || !strings.Contains(toolsText, "Description: eval") {
-		t.Fatalf("expected tools transcript to include Gemini tool schema, got %q", toolsText)
+	if !strings.Contains(toolsText, "# TOOL_GATEWAY_TOOLS.txt") || !strings.Contains(toolsText, "Tool: eval_javascript") || !strings.Contains(toolsText, "Description: eval") || !strings.Contains(toolsText, "TOOL CALL FORMAT") {
+		t.Fatalf("expected tools transcript to include Gemini tool schema and format instructions, got %q", toolsText)
 	}
 	refIDs, _ := ds.payloads[0]["ref_file_ids"].([]any)
 	if len(refIDs) < 2 || refIDs[0] != "file-gemini-history" || refIDs[1] != "file-gemini-tools" {
 		t.Fatalf("expected history and tools ref ids first, got %#v", ds.payloads[0]["ref_file_ids"])
 	}
 	prompt, _ := ds.payloads[0]["prompt"].(string)
-	if !strings.Contains(prompt, "TOOL_GATEWAY_TOOLS.txt") || !strings.Contains(prompt, "TOOL CALL FORMAT") {
-		t.Fatalf("expected live prompt to reference tools file and retain format instructions, got %q", prompt)
+	if !strings.Contains(prompt, "TOOL_GATEWAY_TOOLS.txt") {
+		t.Fatalf("expected live prompt to reference tools file, got %q", prompt)
+	}
+	if strings.Contains(prompt, "TOOL CALL FORMAT") || strings.Contains(prompt, "<|DSML|tool_calls>") {
+		t.Fatalf("expected live prompt to externalize format instructions, got %q", prompt)
 	}
 	if strings.Contains(prompt, "Description: eval") {
 		t.Fatalf("live prompt should not inline tool descriptions, got %q", prompt)

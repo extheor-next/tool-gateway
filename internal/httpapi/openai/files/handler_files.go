@@ -33,9 +33,12 @@ type externalFileUploader interface {
 	UploadFileToProvider(ctx context.Context, filename string, content []byte) (string, error)
 }
 
+type externalFileUploaderWithMetadata interface {
+	UploadFileToProviderWithPurpose(ctx context.Context, filename string, content []byte, purpose string, contentType string) (string, error)
+}
+
 func (h *Handler) UploadFile(w http.ResponseWriter, r *http.Request) {
-	_, err := h.Auth.Determine(r)
-	if err != nil {
+	if _, err := h.Auth.Determine(r); err != nil {
 		shared.WriteOpenAIError(w, http.StatusUnauthorized, err.Error())
 		return
 	}
@@ -73,20 +76,27 @@ func (h *Handler) UploadFile(w http.ResponseWriter, r *http.Request) {
 	}
 	// If backend supports external file upload, proxy to provider
 	if ext, ok := h.Backend.(externalFileUploader); ok {
-		fileID, err := ext.UploadFileToProvider(r.Context(), header.Filename, data)
+		purpose := strings.TrimSpace(r.FormValue("purpose"))
+		var fileID string
+		if extWithMetadata, ok := h.Backend.(externalFileUploaderWithMetadata); ok {
+			fileID, err = extWithMetadata.UploadFileToProviderWithPurpose(r.Context(), header.Filename, data, purpose, contentType)
+		} else {
+			fileID, err = ext.UploadFileToProvider(r.Context(), header.Filename, data)
+		}
 		if err != nil {
 			shared.WriteOpenAIError(w, http.StatusInternalServerError, "Failed to upload file: "+err.Error())
 			return
 		}
-		shared.WriteJSON(w, http.StatusOK, map[string]any{
+		obj := map[string]any{
 			"id":         fileID,
 			"object":     "file",
 			"bytes":      len(data),
 			"created_at": 0,
 			"filename":   header.Filename,
-			"purpose":    strings.TrimSpace(r.FormValue("purpose")),
+			"purpose":    purpose,
 			"status":     "uploaded",
-		})
+		}
+		shared.WriteJSON(w, http.StatusOK, obj)
 		return
 	}
 
@@ -106,8 +116,7 @@ func (h *Handler) UploadFile(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) RetrieveFile(w http.ResponseWriter, r *http.Request) {
-	_, err := h.Auth.Determine(r)
-	if err != nil {
+	if _, err := h.Auth.Determine(r); err != nil {
 		shared.WriteOpenAIError(w, http.StatusUnauthorized, err.Error())
 		return
 	}

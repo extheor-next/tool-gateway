@@ -3,27 +3,28 @@ package promptcompat
 import "tool-gateway/internal/config"
 
 type StandardRequest struct {
-	Surface                 string
-	RequestedModel          string
-	ResolvedModel           string
-	ResponseModel           string
-	Messages                []any
-	HistoryText             string
-	PromptTokenText         string
+	Surface                   string
+	RequestedModel            string
+	ResolvedModel             string
+	ResponseModel             string
+	Messages                  []any
+	HistoryText               string
+	ToolsText                 string
+	PromptTokenText           string
 	CurrentInputFileApplied   bool
 	CurrentInputFileTruncated bool
 	CurrentInputFileID        string
 	CurrentToolsFileID        string
-	ToolsRaw                any
-	FinalPrompt             string
-	ToolNames               []string
-	ToolChoice              ToolChoicePolicy
-	Stream                  bool
-	Thinking                bool
-	Search                  bool
-	RefFileIDs              []string
-	RefFileTokens           int
-	PassThrough             map[string]any
+	ToolsRaw                  any
+	FinalPrompt               string
+	ToolNames                 []string
+	ToolChoice                ToolChoicePolicy
+	Stream                    bool
+	Thinking                  bool
+	Search                    bool
+	RefFileIDs                []string
+	RefFileTokens             int
+	PassThrough               map[string]any
 }
 
 type ToolChoiceMode string
@@ -86,6 +87,12 @@ func (r StandardRequest) CompletionPayload(sessionID string) map[string]any {
 		"thinking_enabled":  r.Thinking,
 		"search_enabled":    r.Search,
 		"request_messages":  r.Messages,
+	}
+	if r.HistoryText != "" {
+		payload["history_text"] = r.HistoryText
+	}
+	if r.ToolsText != "" {
+		payload["tools_text"] = r.ToolsText
 	}
 	for k, v := range r.PassThrough {
 		payload[k] = v

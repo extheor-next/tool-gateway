@@ -4,12 +4,14 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"mime/multipart"
 	"io"
+	"mime/multipart"
 	"net/http"
+	"net/textproto"
 	"net/url"
 	"os"
 	"strconv"
@@ -19,6 +21,7 @@ import (
 
 	"tool-gateway/internal/config"
 	dsclient "tool-gateway/internal/deepseek/client"
+	"tool-gateway/internal/promptcompat"
 )
 
 // OpenAIAdapter is the OpenAI-compatible upstream backend used at runtime.
@@ -39,6 +42,8 @@ func NewOpenAIAdapter(store *config.Store) *OpenAIAdapter {
 
 func (a *OpenAIAdapter) ExternalAIAdapter() bool { return true }
 
+func (a *OpenAIAdapter) PreserveInlineFileInputs() bool { return true }
+
 func (a *OpenAIAdapter) CreateSession(_ context.Context, _ int) (string, error) {
 	return fmt.Sprintf("chatcmpl-tool-gateway-%d", time.Now().UnixNano()), nil
 }
@@ -57,6 +62,11 @@ func (a *OpenAIAdapter) UploadFile(_ context.Context, req dsclient.UploadFileReq
 
 // UploadFileToProvider uploads a file to the external AI provider using OpenAI-compatible Files API.
 func (a *OpenAIAdapter) UploadFileToProvider(ctx context.Context, filename string, content []byte) (string, error) {
+	return a.UploadFileToProviderWithPurpose(ctx, filename, content, "assistants", "")
+}
+
+// UploadFileToProviderWithPurpose uploads a file to the external AI provider using OpenAI-compatible Files API.
+func (a *OpenAIAdapter) UploadFileToProviderWithPurpose(ctx context.Context, filename string, content []byte, purpose string, contentType string) (string, error) {
 	cfg := a.externalConfig()
 	if strings.TrimSpace(cfg.BaseURL) == "" {
 		return "", errors.New("external_ai base_url is required")
@@ -71,15 +81,21 @@ func (a *OpenAIAdapter) UploadFileToProvider(ctx context.Context, filename strin
 	url := base + "/v1/files"
 	body := &bytes.Buffer{}
 	writer := multipart.NewWriter(body)
-	_ = writer.WriteField("purpose", "assistants")
-	part, err := writer.CreateFormFile("file", filename)
+	purpose = strings.TrimSpace(purpose)
+	if purpose == "" {
+		purpose = "assistants"
+	}
+	_ = writer.WriteField("purpose", purpose)
+	part, err := createFilePart(writer, filename, contentType)
 	if err != nil {
 		return "", err
 	}
 	if _, err := part.Write(content); err != nil {
 		return "", err
 	}
-	writer.Close()
+	if err := writer.Close(); err != nil {
+		return "", err
+	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, body)
 	if err != nil {
 		return "", err
@@ -116,6 +132,19 @@ func (a *OpenAIAdapter) UploadFileToProvider(ctx context.Context, filename strin
 	return result.ID, nil
 }
 
+func createFilePart(writer *multipart.Writer, filename string, contentType string) (io.Writer, error) {
+	header := make(textproto.MIMEHeader)
+	header.Set("Content-Disposition", fmt.Sprintf(`form-data; name="file"; filename="%s"`, escapeQuotes(filename)))
+	if strings.TrimSpace(contentType) != "" {
+		header.Set("Content-Type", strings.TrimSpace(contentType))
+	}
+	return writer.CreatePart(header)
+}
+
+func escapeQuotes(s string) string {
+	s = strings.ReplaceAll(s, `\\`, `\\\\`)
+	return strings.ReplaceAll(s, `"`, `\\"`)
+}
 
 func (a *OpenAIAdapter) CallCompletion(ctx context.Context, payload map[string]any, _ string) (*http.Response, error) {
 	cfg := a.externalConfig()
@@ -149,17 +178,178 @@ func (a *OpenAIAdapter) CallCompletion(ctx context.Context, payload map[string]a
 
 func (a *OpenAIAdapter) callOpenAIUpstream(ctx context.Context, cfg externalAIConfig, model string, prompt string, payload map[string]any) (*http.Response, error) {
 	messages := buildMessages(prompt, payload["request_messages"])
+	fileIDs, err := a.prepareOpenAIContextFileIDs(ctx, payload)
+	if err != nil {
+		return nil, err
+	}
+	if isKimiConfig(cfg) {
+		var imageFileIDs []string
+		messages, imageFileIDs, err = a.uploadKimiImageURLParts(ctx, messages)
+		if err != nil {
+			return nil, err
+		}
+		fileIDs = append(fileIDs, imageFileIDs...)
+	}
 	body := map[string]any{
 		"model":    model,
 		"stream":   true,
 		"messages": messages,
 	}
-	copySamplingParams(body, payload)
+	if len(fileIDs) > 0 {
+		body["file_ids"] = stringsToAnySlice(fileIDs)
+	}
+	if !isKimiConfig(cfg) {
+		copySamplingParams(body, payload)
+	}
 	reqURL, err := chatCompletionsURL(cfg.BaseURL)
 	if err != nil {
 		return nil, err
 	}
 	return a.doUpstreamRequest(ctx, cfg, reqURL, body, "Bearer "+cfg.APIKey)
+}
+
+func (a *OpenAIAdapter) prepareOpenAIContextFileIDs(ctx context.Context, payload map[string]any) ([]string, error) {
+	fileIDs := make([]string, 0, 4)
+	if historyText := strings.TrimSpace(asString(payload["history_text"])); historyText != "" {
+		fileID, err := a.UploadFileToProviderWithPurpose(ctx, promptcompat.CurrentInputContextFilename, []byte(historyText), "assistants", "text/plain; charset=utf-8")
+		if err != nil {
+			return nil, err
+		}
+		fileIDs = append(fileIDs, fileID)
+	}
+	if toolsText := strings.TrimSpace(asString(payload["tools_text"])); toolsText != "" {
+		fileID, err := a.UploadFileToProviderWithPurpose(ctx, promptcompat.CurrentToolsContextFilename, []byte(toolsText), "assistants", "text/plain; charset=utf-8")
+		if err != nil {
+			return nil, err
+		}
+		fileIDs = append(fileIDs, fileID)
+	}
+	fileIDs = append(fileIDs, payloadFileIDs(payload["ref_file_ids"])...)
+	return fileIDs, nil
+}
+
+func (a *OpenAIAdapter) uploadKimiImageURLParts(ctx context.Context, messages []any) ([]any, []string, error) {
+	out := make([]any, 0, len(messages))
+	fileIDs := []string{}
+	for _, rawMsg := range messages {
+		msg, ok := rawMsg.(map[string]any)
+		if !ok {
+			out = append(out, rawMsg)
+			continue
+		}
+		parts, ok := msg["content"].([]any)
+		if !ok {
+			out = append(out, msg)
+			continue
+		}
+		newParts := make([]any, 0, len(parts))
+		seenText := map[string]struct{}{}
+		for _, rawPart := range parts {
+			part, ok := anyMap(rawPart)
+			if !ok {
+				newParts = append(newParts, rawPart)
+				continue
+			}
+			partType := strings.ToLower(strings.TrimSpace(asString(part["type"])))
+			if partType == "text" {
+				text := strings.TrimSpace(asString(part["text"]))
+				if _, exists := seenText[text]; exists {
+					continue
+				}
+				seenText[text] = struct{}{}
+				newParts = append(newParts, rawPart)
+				continue
+			}
+			if partType != "image_url" {
+				newParts = append(newParts, rawPart)
+				continue
+			}
+			imageData, filename, contentType, ok := parseImageURLPart(part["image_url"])
+			if !ok {
+				newParts = append(newParts, rawPart)
+				continue
+			}
+			fileID, err := a.UploadFileToProviderWithPurpose(ctx, filename, imageData, "vision", contentType)
+			if err != nil {
+				return nil, nil, err
+			}
+			fileIDs = append(fileIDs, fileID)
+		}
+		cloned := cloneStringAnyMap(msg)
+		cloned["content"] = newParts
+		out = append(out, cloned)
+	}
+	return out, fileIDs, nil
+}
+
+func parseImageURLPart(raw any) ([]byte, string, string, bool) {
+	urlStr := ""
+	switch v := raw.(type) {
+	case string:
+		urlStr = v
+	case map[string]any:
+		urlStr = asString(v["url"])
+	}
+	if !strings.HasPrefix(urlStr, "data:") {
+		return nil, "", "", false
+	}
+	parts := strings.SplitN(urlStr[len("data:"):], ";base64,", 2)
+	if len(parts) != 2 || strings.TrimSpace(parts[1]) == "" {
+		return nil, "", "", false
+	}
+	contentType := strings.TrimSpace(parts[0])
+	if contentType == "" {
+		contentType = "image/png"
+	}
+	data, err := base64.StdEncoding.DecodeString(parts[1])
+	if err != nil {
+		return nil, "", "", false
+	}
+	ext := "png"
+	if slash := strings.LastIndex(contentType, "/"); slash >= 0 && slash+1 < len(contentType) {
+		ext = strings.TrimSpace(contentType[slash+1:])
+	}
+	if ext == "jpeg" {
+		ext = "jpg"
+	}
+	return data, "image." + ext, contentType, true
+}
+
+func cloneStringAnyMap(in map[string]any) map[string]any {
+	out := make(map[string]any, len(in))
+	for k, v := range in {
+		out[k] = v
+	}
+	return out
+}
+
+func payloadFileIDs(raw any) []string {
+	out := []string{}
+	switch v := raw.(type) {
+	case []any:
+		for _, item := range v {
+			if fileID := strings.TrimSpace(asString(item)); fileID != "" {
+				out = append(out, fileID)
+			}
+		}
+	case []string:
+		for _, item := range v {
+			if fileID := strings.TrimSpace(item); fileID != "" {
+				out = append(out, fileID)
+			}
+		}
+	}
+	return out
+}
+
+func stringsToAnySlice(values []string) []any {
+	out := make([]any, 0, len(values))
+	for _, value := range values {
+		if strings.TrimSpace(value) != "" {
+			out = append(out, value)
+		}
+	}
+	return out
 }
 
 func (a *OpenAIAdapter) callClaudeUpstream(ctx context.Context, cfg externalAIConfig, model string, prompt string, payload map[string]any) (*http.Response, error) {
@@ -423,7 +613,6 @@ func (r *providerLimitReadCloser) Close() error {
 	return err
 }
 
-
 func claudeMessagesURL(base string) (string, error) {
 	base = strings.TrimSpace(base)
 	if base == "" {
@@ -443,6 +632,10 @@ func claudeMessagesURL(base string) (string, error) {
 		u.Path = path + "/v1/messages"
 	}
 	return u.String(), nil
+}
+
+func isKimiConfig(cfg externalAIConfig) bool {
+	return strings.Contains(strings.ToLower(cfg.BaseURL), "kimi") || strings.Contains(strings.ToLower(cfg.Model), "kimi")
 }
 
 func detectModeFromURL(baseURL string) string {
@@ -595,7 +788,6 @@ func copySamplingParams(dst, src map[string]any) {
 	}
 }
 
-
 // buildMessages constructs the messages array for the upstream provider.
 // If the original request contained image content (image_url blocks), those
 // are preserved alongside the prompt text to support multimodal requests.
@@ -642,13 +834,31 @@ func buildMessages(prompt string, rawMessages any) []any {
 		return []any{map[string]string{"role": "user", "content": prompt}}
 	}
 
-	// Build content array: prompt text + image parts
+	// Build content array: prompt text + non-duplicate multimodal parts.
 	content := make([]any, 0, len(lastImageParts)+1)
-	content = append(content, map[string]string{"type": "text", "text": prompt})
+	if strings.TrimSpace(prompt) != "" && !contentHasText(lastImageParts, prompt) {
+		content = append(content, map[string]string{"type": "text", "text": prompt})
+	}
 	content = append(content, lastImageParts...)
 	return []any{map[string]any{"role": "user", "content": content}}
 }
 
+func contentHasText(parts []any, text string) bool {
+	want := strings.TrimSpace(text)
+	if want == "" {
+		return false
+	}
+	for _, raw := range parts {
+		part, ok := anyMap(raw)
+		if !ok || strings.ToLower(strings.TrimSpace(asString(part["type"]))) != "text" {
+			continue
+		}
+		if strings.TrimSpace(asString(part["text"])) == want {
+			return true
+		}
+	}
+	return false
+}
 
 func convertOpenAIStreamResponse(upstream *http.Response) *http.Response {
 	pr, pw := io.Pipe()
@@ -731,6 +941,20 @@ func extractOpenAIContentDeltas(chunk map[string]any) []openAIDeltaPart {
 func writeDeepSeekSSE(w io.Writer, path, text string) {
 	b, _ := json.Marshal(map[string]any{"p": path, "v": text})
 	_, _ = fmt.Fprintf(w, "data: %s\n\n", b)
+}
+
+func anyMap(v any) (map[string]any, bool) {
+	if m, ok := v.(map[string]any); ok {
+		return m, true
+	}
+	if m, ok := v.(map[string]string); ok {
+		out := make(map[string]any, len(m))
+		for k, val := range m {
+			out[k] = val
+		}
+		return out, true
+	}
+	return nil, false
 }
 
 func asString(v any) string {

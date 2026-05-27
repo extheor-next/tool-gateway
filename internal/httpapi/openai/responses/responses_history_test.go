@@ -11,7 +11,6 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"tool-gateway/internal/auth"
 	"tool-gateway/internal/chathistory"
 	dsclient "tool-gateway/internal/deepseek/client"
 )
@@ -20,19 +19,19 @@ type responsesHistoryBackend struct {
 	payload map[string]any
 }
 
-func (d *responsesHistoryBackend) CreateSession(context.Context, *auth.RequestAuth, int) (string, error) {
+func (d *responsesHistoryBackend) CreateSession(context.Context, int) (string, error) {
 	return "session-id", nil
 }
 
-func (d *responsesHistoryBackend) GetPow(context.Context, *auth.RequestAuth, int) (string, error) {
+func (d *responsesHistoryBackend) GetPow(context.Context, int) (string, error) {
 	return "pow", nil
 }
 
-func (d *responsesHistoryBackend) UploadFile(context.Context, *auth.RequestAuth, dsclient.UploadFileRequest, int) (*dsclient.UploadFileResult, error) {
+func (d *responsesHistoryBackend) UploadFile(context.Context, dsclient.UploadFileRequest, int) (*dsclient.UploadFileResult, error) {
 	return &dsclient.UploadFileResult{ID: "file-id"}, nil
 }
 
-func (d *responsesHistoryBackend) CallCompletion(_ context.Context, _ *auth.RequestAuth, payload map[string]any, _ string, _ int) (*http.Response, error) {
+func (d *responsesHistoryBackend) CallCompletion(_ context.Context, payload map[string]any, _ string) (*http.Response, error) {
 	d.payload = payload
 	return &http.Response{
 		StatusCode: http.StatusOK,
@@ -41,11 +40,11 @@ func (d *responsesHistoryBackend) CallCompletion(_ context.Context, _ *auth.Requ
 	}, nil
 }
 
-func (d *responsesHistoryBackend) DeleteSessionForToken(context.Context, string, string) (*dsclient.DeleteSessionResult, error) {
+func (d *responsesHistoryBackend) DeleteSession(context.Context, string, int) (*dsclient.DeleteSessionResult, error) {
 	return &dsclient.DeleteSessionResult{Success: true}, nil
 }
 
-func (d *responsesHistoryBackend) DeleteAllSessionsForToken(context.Context, string) error {
+func (d *responsesHistoryBackend) DeleteAllSessions(context.Context) error {
 	return nil
 }
 

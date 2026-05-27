@@ -2,6 +2,8 @@ package chat
 
 import (
 	"context"
+	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -12,10 +14,18 @@ import (
 	"testing"
 	"time"
 
-	"tool-gateway/internal/auth"
 	"tool-gateway/internal/chathistory"
+	"tool-gateway/internal/config"
+	"tool-gateway/internal/llm"
 	"tool-gateway/internal/promptcompat"
 )
+
+func asTestString(v any) string {
+	if s, ok := v.(string); ok {
+		return s
+	}
+	return ""
+}
 
 func newTestChatHistoryStore(t *testing.T) *chathistory.Store {
 	t.Helper()
@@ -98,8 +108,8 @@ func TestChatCompletionsNonStreamPersistsHistory(t *testing.T) {
 	if full.FinalPrompt == "" {
 		t.Fatalf("expected final prompt to be persisted")
 	}
-	if item.CallerID != "caller:test" {
-		t.Fatalf("expected caller hash persisted in summary, got %#v", item.CallerID)
+	if item.Surface != "openai.chat_completions" {
+		t.Fatalf("expected surface openai.chat_completions, got %q", item.Surface)
 	}
 }
 
@@ -191,10 +201,6 @@ func TestStartChatHistoryRecoversFromTransientWriteFailure(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil)
 	req.Header.Set("Authorization", "Bearer direct-token")
 	req.Header.Set("Content-Type", "application/json")
-	a := &auth.RequestAuth{
-		CallerID:  "caller:test",
-		AccountID: "acct:test",
-	}
 	stdReq := promptcompat.StandardRequest{
 		ResponseModel: "deepseek-v4-flash",
 		Stream:        true,
@@ -204,7 +210,7 @@ func TestStartChatHistoryRecoversFromTransientWriteFailure(t *testing.T) {
 		FinalPrompt: "hello",
 	}
 
-	session := startChatHistory(historyStore, req, a, stdReq)
+	session := startChatHistory(historyStore, req, stdReq)
 	if session == nil {
 		t.Fatalf("expected session even when initial persistence fails")
 		return
@@ -351,6 +357,81 @@ func TestChatCompletionsSkipsHistoryWhenDisabled(t *testing.T) {
 	}
 	if len(snapshot.Items) != 0 {
 		t.Fatalf("expected disabled history to stay empty, got %#v", snapshot.Items)
+	}
+}
+
+func TestChatCompletionsExternalKimiUploadsContextAndForwardsImage(t *testing.T) {
+	uploadNames := []string{}
+	var seenChat map[string]any
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		switch req.URL.Path {
+		case "/v1/files":
+			if err := req.ParseMultipartForm(32 << 20); err != nil {
+				t.Fatalf("parse upload: %v", err)
+			}
+			_, header, err := req.FormFile("file")
+			if err != nil {
+				t.Fatalf("expected uploaded file: %v", err)
+			}
+			uploadNames = append(uploadNames, header.Filename)
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"id":"file-` + strings.TrimSuffix(header.Filename, ".txt") + `"}`))
+		case "/v1/chat/completions":
+			if err := json.NewDecoder(req.Body).Decode(&seenChat); err != nil {
+				t.Fatalf("decode chat: %v", err)
+			}
+			w.Header().Set("Content-Type", "text/event-stream")
+			_, _ = io.WriteString(w, "data: {\"choices\":[{\"delta\":{\"content\":\"ok\"}}]}\n\ndata: [DONE]\n\n")
+		default:
+			t.Fatalf("unexpected path: %s", req.URL.Path)
+		}
+	}))
+	defer server.Close()
+	t.Setenv("TOOL_GATEWAY_CONFIG_JSON", `{"external_ai":{"base_url":"`+server.URL+`/v1","api_key":"local-key","model":"kimi-k2.5"}}`)
+	store := config.LoadStore()
+	backend := llm.NewOpenAIAdapter(store)
+	historyStore := newTestChatHistoryStore(t)
+	h := &Handler{
+		Store: mockOpenAIConfig{
+			currentInputEnabled: true,
+		},
+		Auth:        streamStatusAuthStub{},
+		Backend:     backend,
+		ChatHistory: historyStore,
+	}
+
+	reqBody := `{"model":"kimi-k2.5","messages":[{"role":"user","content":[{"type":"text","text":"what is this image?"},{"type":"image_url","image_url":{"url":"data:image/png;base64,aW1hZ2U="}}]}],"tools":[{"type":"function","function":{"name":"search","description":"Search docs","parameters":{"type":"object"}}}],"stream":false}`
+	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(reqBody))
+	req.Header.Set("Authorization", "Bearer direct-token")
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+
+	h.ChatCompletions(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d body=%s", rec.Code, rec.Body.String())
+	}
+	if len(uploadNames) != 2 || uploadNames[0] != "TOOL_GATEWAY_HISTORY.txt" || uploadNames[1] != "image.png" {
+		t.Fatalf("expected history and image file uploads without unrelated tools file, got %#v", uploadNames)
+	}
+	fileIDs, _ := seenChat["file_ids"].([]any)
+	if len(fileIDs) != 2 || fileIDs[0] != "file-TOOL_GATEWAY_HISTORY" || fileIDs[1] != "file-image.png" {
+		t.Fatalf("expected history and image file IDs in chat request, got %#v", seenChat["file_ids"])
+	}
+	messages := seenChat["messages"].([]any)
+	content := messages[0].(map[string]any)["content"].([]any)
+	continuationCount := 0
+	for _, raw := range content {
+		part, _ := raw.(map[string]any)
+		if part["type"] == "image_url" {
+			t.Fatalf("did not expect image_url in chat request, got %#v", messages)
+		}
+		if part["type"] == "text" && strings.Contains(asTestString(part["text"]), "Continue from the latest state") {
+			continuationCount++
+		}
+	}
+	if continuationCount != 1 {
+		t.Fatalf("expected exactly one continuation prompt in upstream chat content, got %d content=%#v", continuationCount, content)
 	}
 }
 

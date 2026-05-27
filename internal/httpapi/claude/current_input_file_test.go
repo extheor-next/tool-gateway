@@ -12,6 +12,7 @@ import (
 	"tool-gateway/internal/auth"
 	"tool-gateway/internal/chathistory"
 	dsclient "tool-gateway/internal/deepseek/client"
+	"tool-gateway/internal/httpapi/openai/history"
 )
 
 type claudeCurrentInputAuth struct{}
@@ -20,9 +21,9 @@ type claudeHistoryConfig struct {
 	aliases map[string]string
 }
 
-func (m claudeHistoryConfig) ModelAliases() map[string]string { return m.aliases }
-func (claudeHistoryConfig) CurrentInputFileEnabled() bool     { return false }
-func (claudeHistoryConfig) CurrentInputFileMinChars() int     { return 0 }
+func (m claudeHistoryConfig) ModelAliases() map[string]string    { return m.aliases }
+func (claudeHistoryConfig) CurrentInputFileEnabled() bool        { return false }
+func (claudeHistoryConfig) CurrentInputFileMinChars() int        { return 0 }
 func (claudeHistoryConfig) CurrentInputFileMaxKeepMessages() int { return 40 }
 
 func (claudeCurrentInputAuth) Determine(*http.Request) (*auth.RequestAuth, error) {
@@ -79,6 +80,13 @@ type claudeCurrentInputDS struct {
 	uploads []dsclient.UploadFileRequest
 	payload map[string]any
 }
+
+type externalClaudeCurrentInputDS struct {
+	*claudeCurrentInputDS
+}
+
+func (externalClaudeCurrentInputDS) ExternalAIAdapter() bool        { return true }
+func (externalClaudeCurrentInputDS) PreserveInlineFileInputs() bool { return true }
 
 func (d *claudeCurrentInputDS) CreateSession(context.Context, int) (string, error) {
 	return "session-id", nil
@@ -158,6 +166,44 @@ func TestClaudeDirectAppliesCurrentInputFile(t *testing.T) {
 	}
 }
 
+func TestClaudeDirectPreservesImageBlocksForExternalKimi(t *testing.T) {
+	norm, err := normalizeClaudeRequest(mockClaudeConfig{aliases: map[string]string{"claude-sonnet-4-6": "kimi-k2.5"}}, map[string]any{
+		"model": "claude-sonnet-4-6",
+		"messages": []any{
+			map[string]any{"role": "user", "content": []any{
+				map[string]any{"type": "image", "source": map[string]any{"type": "base64", "media_type": "image/png", "data": "aW1hZ2U="}},
+				map[string]any{"type": "text", "text": "uploaded image"},
+			}},
+			map[string]any{"role": "user", "content": []any{
+				map[string]any{"type": "text", "text": "这是什么？"},
+			}},
+		},
+		"max_tokens": 1024,
+	})
+	if err != nil {
+		t.Fatalf("normalize request: %v", err)
+	}
+	stdReq, err := (history.Service{Backend: externalClaudeCurrentInputDS{claudeCurrentInputDS: &claudeCurrentInputDS{}}}).ApplyCurrentInputFile(context.Background(), norm.Standard)
+	if err != nil {
+		t.Fatalf("apply current input: %v", err)
+	}
+	messages := stdReq.Messages
+	content, ok := messages[0].(map[string]any)["content"].([]any)
+	if !ok {
+		t.Fatalf("expected multimodal continuation content, got %#v", messages)
+	}
+	foundImage := false
+	for _, raw := range content {
+		part, _ := raw.(map[string]any)
+		if part["type"] == "image_url" {
+			foundImage = true
+		}
+	}
+	if !foundImage {
+		t.Fatalf("expected Claude image block converted to OpenAI image_url for Kimi upload, got %#v", messages)
+	}
+}
+
 func TestClaudeCurrentInputFileUploadsToolsSeparately(t *testing.T) {
 	ds := &claudeCurrentInputDS{}
 	h := &Handler{
@@ -165,7 +211,7 @@ func TestClaudeCurrentInputFileUploadsToolsSeparately(t *testing.T) {
 		Auth:    claudeCurrentInputAuth{},
 		Backend: ds,
 	}
-	reqBody := `{"model":"claude-sonnet-4-6","messages":[{"role":"user","content":"hello from claude"}],"tools":[{"name":"search","description":"Search docs","input_schema":{"type":"object"}}],"max_tokens":1024}`
+	reqBody := `{"model":"claude-sonnet-4-6","messages":[{"role":"user","content":"please search docs"}],"tools":[{"name":"search","description":"Search docs","input_schema":{"type":"object"}}],"max_tokens":1024}`
 	req := httptest.NewRequest(http.MethodPost, "/v1/messages", strings.NewReader(reqBody))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
@@ -186,16 +232,22 @@ func TestClaudeCurrentInputFileUploadsToolsSeparately(t *testing.T) {
 		t.Fatalf("history transcript should not embed tool descriptions, got %q", historyText)
 	}
 	toolsText := string(ds.uploads[1].Data)
-	if !strings.Contains(toolsText, "# TOOL_GATEWAY_TOOLS.txt") || !strings.Contains(toolsText, "Tool: search") || !strings.Contains(toolsText, "Description: Search docs") {
-		t.Fatalf("expected tools transcript to include tool schema, got %q", toolsText)
+	if !strings.Contains(toolsText, "# TOOL_GATEWAY_TOOLS.txt") || !strings.Contains(toolsText, "Tool: search") || !strings.Contains(toolsText, `Parameters: {"type":"object"}`) || !strings.Contains(toolsText, "TOOL CALL FORMAT") {
+		t.Fatalf("expected compact tools transcript to include tool schema and format instructions, got %q", toolsText)
+	}
+	if strings.Contains(toolsText, "Description: Search docs") {
+		t.Fatalf("expected compact tools transcript to omit descriptions, got %q", toolsText)
 	}
 	refIDs, _ := ds.payload["ref_file_ids"].([]any)
 	if len(refIDs) < 2 || refIDs[0] != "file-claude-history" || refIDs[1] != "file-claude-tools" {
 		t.Fatalf("expected history and tools ref ids first, got %#v", ds.payload["ref_file_ids"])
 	}
 	prompt, _ := ds.payload["prompt"].(string)
-	if !strings.Contains(prompt, "TOOL_GATEWAY_TOOLS.txt") || !strings.Contains(prompt, "TOOL CALL FORMAT") {
-		t.Fatalf("expected live prompt to reference tools file and retain format instructions, got %q", prompt)
+	if !strings.Contains(prompt, "TOOL_GATEWAY_TOOLS.txt") {
+		t.Fatalf("expected live prompt to reference tools file, got %q", prompt)
+	}
+	if strings.Contains(prompt, "TOOL CALL FORMAT") || strings.Contains(prompt, "<|DSML|tool_calls>") {
+		t.Fatalf("expected live prompt to externalize format instructions, got %q", prompt)
 	}
 	if strings.Contains(prompt, "Description: Search docs") {
 		t.Fatalf("live prompt should not inline tool descriptions, got %q", prompt)

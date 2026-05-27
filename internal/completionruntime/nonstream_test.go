@@ -19,8 +19,15 @@ type fakeCompletionBackend struct {
 
 type currentInputRuntimeConfig struct{}
 
-func (currentInputRuntimeConfig) CurrentInputFileEnabled() bool { return true }
-func (currentInputRuntimeConfig) CurrentInputFileMinChars() int { return 0 }
+type externalFakeCompletionBackend struct {
+	fakeCompletionBackend
+}
+
+func (externalFakeCompletionBackend) ExternalAIAdapter() bool { return true }
+
+func (currentInputRuntimeConfig) CurrentInputFileEnabled() bool        { return true }
+func (currentInputRuntimeConfig) CurrentInputFileMinChars() int        { return 0 }
+func (currentInputRuntimeConfig) CurrentInputFileMaxKeepMessages() int { return 0 }
 
 func (f *fakeCompletionBackend) CreateSession(context.Context, int) (string, error) {
 	return "session-1", nil
@@ -180,6 +187,78 @@ func TestStartCompletionAppliesCurrentInputFileGlobally(t *testing.T) {
 	}
 	if !start.Request.CurrentInputFileApplied || !strings.Contains(start.Request.PromptTokenText, "# TOOL_GATEWAY_HISTORY.txt") {
 		t.Fatalf("expected prepared request to carry current input file state, got %#v", start.Request)
+	}
+}
+
+func TestStartCompletionExternalCurrentInputCarriesContextAndImages(t *testing.T) {
+	ds := &externalFakeCompletionBackend{fakeCompletionBackend: fakeCompletionBackend{responses: []*http.Response{sseHTTPResponse(http.StatusOK, `data: {"p":"response/content","v":"ok"}`)}}}
+	stdReq := promptcompat.StandardRequest{
+		Surface:         "test_adapter",
+		RequestedModel:  "kimi-k2.5",
+		ResolvedModel:   "kimi-k2.5",
+		ResponseModel:   "kimi-k2.5",
+		PromptTokenText: "what is this image?",
+		FinalPrompt:     "what is this image?",
+		Messages: []any{
+			map[string]any{"role": "user", "content": []any{
+				map[string]any{"type": "text", "text": "uploaded image"},
+				map[string]any{"type": "image_url", "image_url": map[string]any{"url": "data:image/png;base64,aW1hZ2U="}},
+			}},
+			map[string]any{"role": "user", "content": []any{
+				map[string]any{"type": "text", "text": "read this file and explain the image"},
+			}},
+		},
+		ToolsRaw: []any{map[string]any{
+			"type": "function",
+			"function": map[string]any{
+				"name":        "Read",
+				"description": "Read file contents from disk",
+				"parameters":  map[string]any{"type": "object"},
+			},
+		}},
+	}
+
+	start, outErr := StartCompletion(context.Background(), ds, stdReq, Options{
+		CurrentInputFile: currentInputRuntimeConfig{},
+	})
+	if outErr != nil {
+		t.Fatalf("unexpected output error: %#v", outErr)
+	}
+	if len(ds.uploads) != 0 {
+		t.Fatalf("external adapter should upload context later, got runtime uploads %#v", ds.uploads)
+	}
+	payload := ds.payloads[0]
+	if !strings.Contains(payload["history_text"].(string), "# TOOL_GATEWAY_HISTORY.txt") {
+		t.Fatalf("expected history_text in payload, got %#v", payload["history_text"])
+	}
+	toolsText := payload["tools_text"].(string)
+	if !strings.Contains(toolsText, "# TOOL_GATEWAY_TOOLS.txt") {
+		t.Fatalf("expected tools_text in payload, got %#v", payload["tools_text"])
+	}
+	if !strings.Contains(toolsText, "TOOL CALL FORMAT") || !strings.Contains(toolsText, "<|DSML|tool_calls>") {
+		t.Fatalf("expected tool-call rules in tools_text, got %#v", payload["tools_text"])
+	}
+	prompt := payload["prompt"].(string)
+	if strings.Contains(prompt, "TOOL CALL FORMAT") || strings.Contains(prompt, "<|DSML|tool_calls>") {
+		t.Fatalf("expected short prompt without inline tool-call rules, got %q", prompt)
+	}
+	if strings.Contains(prompt, "Output integrity guard") || strings.Contains(prompt, "<|begin▁of▁sentence|>") || strings.Contains(prompt, "<|User|><|Assistant|>") {
+		t.Fatalf("expected external current-input prompt to skip full prompt template, got %q", prompt)
+	}
+	messages := payload["request_messages"].([]any)
+	content := messages[0].(map[string]any)["content"].([]any)
+	foundImage := false
+	for _, raw := range content {
+		part, _ := raw.(map[string]any)
+		if part["type"] == "image_url" {
+			foundImage = true
+		}
+	}
+	if !foundImage {
+		t.Fatalf("expected image_url part to remain in request_messages, got %#v", messages)
+	}
+	if !start.Request.CurrentInputFileApplied || start.Request.HistoryText == "" {
+		t.Fatalf("expected prepared external request to carry current input state, got %#v", start.Request)
 	}
 }
 

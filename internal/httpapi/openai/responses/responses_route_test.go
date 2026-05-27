@@ -2,7 +2,6 @@ package responses
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -10,7 +9,6 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"tool-gateway/internal/account"
 	"tool-gateway/internal/auth"
 	"tool-gateway/internal/config"
 )
@@ -19,27 +17,7 @@ func newDirectTokenResolver(t *testing.T) (*config.Store, *auth.Resolver) {
 	t.Helper()
 	t.Setenv("TOOL_GATEWAY_CONFIG_JSON", `{"keys":["token-a","token-b"],"accounts":[]}`)
 	store := config.LoadStore()
-	pool := account.NewPool(store)
-	resolver := auth.NewResolver(store, pool, func(_ context.Context, _ config.Account) (string, error) {
-		return "unused", nil
-	})
-	return store, resolver
-}
-
-func newManagedKeyResolver(t *testing.T) (*config.Store, *auth.Resolver) {
-	t.Helper()
-	t.Setenv("TOOL_GATEWAY_CONFIG_JSON", `{
-		"keys":["managed-key"],
-		"accounts":[{"email":"acc@example.com","password":"pwd","token":"account-token"}]
-	}`)
-	t.Setenv("TOOL_GATEWAY_ACCOUNT_MAX_INFLIGHT", "1")
-	t.Setenv("TOOL_GATEWAY_ACCOUNT_MAX_QUEUE", "0")
-	store := config.LoadStore()
-	pool := account.NewPool(store)
-	resolver := auth.NewResolver(store, pool, func(_ context.Context, _ config.Account) (string, error) {
-		return "unused", nil
-	})
-	return store, resolver
+	return store, auth.NewResolver(store)
 }
 
 func authForToken(t *testing.T, resolver *auth.Resolver, token string) *auth.RequestAuth {
@@ -59,7 +37,7 @@ func TestGetResponseByIDRequiresAuthAndIsTenantIsolated(t *testing.T) {
 	r := chi.NewRouter()
 	RegisterRoutes(r, h)
 
-	ownerA := responseStoreOwner(authForToken(t, resolver, "token-a"))
+	ownerA := "default"
 	h.getResponseStore().put(ownerA, "resp_test", map[string]any{
 		"id":     "resp_test",
 		"object": "response",
@@ -74,13 +52,13 @@ func TestGetResponseByIDRequiresAuthAndIsTenantIsolated(t *testing.T) {
 		}
 	})
 
-	t.Run("cross-tenant-not-found", func(t *testing.T) {
+	t.Run("cross-token-ok", func(t *testing.T) {
 		req := httptest.NewRequest(http.MethodGet, "/v1/responses/resp_test", nil)
 		req.Header.Set("Authorization", "Bearer token-b")
 		rec := httptest.NewRecorder()
 		r.ServeHTTP(rec, req)
-		if rec.Code != http.StatusNotFound {
-			t.Fatalf("expected 404, got %d body=%s", rec.Code, rec.Body.String())
+		if rec.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d body=%s", rec.Code, rec.Body.String())
 		}
 	})
 
@@ -137,40 +115,5 @@ func TestResponsesRouteValidationContract(t *testing.T) {
 				t.Fatalf("expected error.param: %#v", out)
 			}
 		})
-	}
-}
-
-func TestGetResponseByIDManagedKeySkipsAccountPoolPressure(t *testing.T) {
-	store, resolver := newManagedKeyResolver(t)
-	h := &Handler{Store: store, Auth: resolver}
-	r := chi.NewRouter()
-	RegisterRoutes(r, h)
-
-	ownerReq := httptest.NewRequest(http.MethodGet, "/v1/responses/resp_test", nil)
-	ownerReq.Header.Set("Authorization", "Bearer managed-key")
-	ownerAuth, err := resolver.DetermineCaller(ownerReq)
-	if err != nil {
-		t.Fatalf("determine caller failed: %v", err)
-	}
-	owner := responseStoreOwner(ownerAuth)
-	h.getResponseStore().put(owner, "resp_test", map[string]any{
-		"id":     "resp_test",
-		"object": "response",
-	})
-
-	occupyReq := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil)
-	occupyReq.Header.Set("Authorization", "Bearer managed-key")
-	occupied, err := resolver.Determine(occupyReq)
-	if err != nil {
-		t.Fatalf("expected first acquire to succeed: %v", err)
-	}
-	defer resolver.Release(occupied)
-
-	req := httptest.NewRequest(http.MethodGet, "/v1/responses/resp_test", nil)
-	req.Header.Set("Authorization", "Bearer managed-key")
-	rec := httptest.NewRecorder()
-	r.ServeHTTP(rec, req)
-	if rec.Code != http.StatusOK {
-		t.Fatalf("expected 200 under pool pressure, got %d body=%s", rec.Code, rec.Body.String())
 	}
 }

@@ -46,13 +46,7 @@ func historySplitTestMessages() []any {
 type streamStatusManagedAuthStub struct{}
 
 func (streamStatusManagedAuthStub) Determine(_ *http.Request) (*auth.RequestAuth, error) {
-	return &auth.RequestAuth{
-		UseConfigToken: true,
-		DeepSeekToken:  "managed-token",
-		CallerID:       "caller:test",
-		AccountID:      "acct:test",
-		TriedAccounts:  map[string]bool{},
-	}, nil
+	return &auth.RequestAuth{CallerID: "caller:test"}, nil
 }
 
 func (streamStatusManagedAuthStub) DetermineCaller(_ *http.Request) (*auth.RequestAuth, error) {
@@ -112,7 +106,7 @@ func TestApplyCurrentInputFileSkipsShortInputWhenThresholdNotReached(t *testing.
 		t.Fatalf("normalize failed: %v", err)
 	}
 
-	out, err := h.applyCurrentInputFile(context.Background(), &auth.RequestAuth{DeepSeekToken: "token"}, stdReq)
+	out, err := h.applyCurrentInputFile(context.Background(), &auth.RequestAuth{CallerID: "caller:test"}, stdReq)
 	if err != nil {
 		t.Fatalf("apply current input file failed: %v", err)
 	}
@@ -143,7 +137,7 @@ func TestApplyThinkingInjectionAppendsLatestUserPrompt(t *testing.T) {
 		t.Fatalf("normalize failed: %v", err)
 	}
 
-	out, err := h.applyCurrentInputFile(context.Background(), &auth.RequestAuth{DeepSeekToken: "token"}, stdReq)
+	out, err := h.applyCurrentInputFile(context.Background(), &auth.RequestAuth{CallerID: "caller:test"}, stdReq)
 	if err != nil {
 		t.Fatalf("apply thinking injection failed: %v", err)
 	}
@@ -175,7 +169,7 @@ func TestApplyThinkingInjectionUsesCustomPrompt(t *testing.T) {
 		t.Fatalf("normalize failed: %v", err)
 	}
 
-	out, err := h.applyCurrentInputFile(context.Background(), &auth.RequestAuth{DeepSeekToken: "token"}, stdReq)
+	out, err := h.applyCurrentInputFile(context.Background(), &auth.RequestAuth{CallerID: "caller:test"}, stdReq)
 	if err != nil {
 		t.Fatalf("apply thinking injection failed: %v", err)
 	}
@@ -201,7 +195,7 @@ func TestApplyCurrentInputFileDisabledPassThrough(t *testing.T) {
 		t.Fatalf("normalize failed: %v", err)
 	}
 
-	out, err := h.applyCurrentInputFile(context.Background(), &auth.RequestAuth{DeepSeekToken: "token"}, stdReq)
+	out, err := h.applyCurrentInputFile(context.Background(), &auth.RequestAuth{CallerID: "caller:test"}, stdReq)
 	if err != nil {
 		t.Fatalf("apply current input file failed: %v", err)
 	}
@@ -237,7 +231,7 @@ func TestApplyCurrentInputFileUploadsFirstTurnWithNumberedHistoryTranscript(t *t
 		t.Fatalf("normalize failed: %v", err)
 	}
 
-	out, err := h.applyCurrentInputFile(context.Background(), &auth.RequestAuth{DeepSeekToken: "token"}, stdReq)
+	out, err := h.applyCurrentInputFile(context.Background(), &auth.RequestAuth{CallerID: "caller:test"}, stdReq)
 	if err != nil {
 		t.Fatalf("apply current input file failed: %v", err)
 	}
@@ -304,7 +298,7 @@ func TestApplyCurrentInputFilePreservesFullContextPromptForTokenCounting(t *test
 		t.Fatalf("normalize failed: %v", err)
 	}
 
-	out, err := h.applyCurrentInputFile(context.Background(), &auth.RequestAuth{DeepSeekToken: "token"}, stdReq)
+	out, err := h.applyCurrentInputFile(context.Background(), &auth.RequestAuth{CallerID: "caller:test"}, stdReq)
 	if err != nil {
 		t.Fatalf("apply current input file failed: %v", err)
 	}
@@ -349,7 +343,7 @@ func TestApplyCurrentInputFileUploadsFullContextFile(t *testing.T) {
 		t.Fatalf("normalize failed: %v", err)
 	}
 
-	out, err := h.applyCurrentInputFile(context.Background(), &auth.RequestAuth{DeepSeekToken: "token"}, stdReq)
+	out, err := h.applyCurrentInputFile(context.Background(), &auth.RequestAuth{CallerID: "caller:test"}, stdReq)
 	if err != nil {
 		t.Fatalf("apply current input file failed: %v", err)
 	}
@@ -390,8 +384,10 @@ func TestApplyCurrentInputFileUploadsToolsContextSeparately(t *testing.T) {
 		Backend: ds,
 	}
 	req := map[string]any{
-		"model":    "deepseek-v4-flash",
-		"messages": historySplitTestMessages(),
+		"model": "deepseek-v4-flash",
+		"messages": []any{
+			map[string]any{"role": "user", "content": "please search docs for tool usage"},
+		},
 		"tools": []any{
 			map[string]any{
 				"type": "function",
@@ -410,7 +406,7 @@ func TestApplyCurrentInputFileUploadsToolsContextSeparately(t *testing.T) {
 		t.Fatalf("normalize failed: %v", err)
 	}
 
-	out, err := h.applyCurrentInputFile(context.Background(), &auth.RequestAuth{DeepSeekToken: "token"}, stdReq)
+	out, err := h.applyCurrentInputFile(context.Background(), &auth.RequestAuth{CallerID: "caller:test"}, stdReq)
 	if err != nil {
 		t.Fatalf("apply current input file failed: %v", err)
 	}
@@ -428,19 +424,22 @@ func TestApplyCurrentInputFileUploadsToolsContextSeparately(t *testing.T) {
 		t.Fatalf("history transcript should not embed tool descriptions, got %q", historyText)
 	}
 	toolsText := string(ds.uploadCalls[1].Data)
-	for _, want := range []string{"# TOOL_GATEWAY_TOOLS.txt", "Tool: search", "Description: search docs", `Parameters: {"type":"object"}`} {
+	for _, want := range []string{"# TOOL_GATEWAY_TOOLS.txt", "Tool: search", `Parameters: {"type":"object"}`} {
 		if !strings.Contains(toolsText, want) {
 			t.Fatalf("expected tools transcript to contain %q, got %q", want, toolsText)
 		}
 	}
-	if strings.Contains(toolsText, "TOOL CALL FORMAT") {
-		t.Fatalf("tools transcript should not duplicate tool format instructions, got %q", toolsText)
+	if strings.Contains(toolsText, "Description: search docs") {
+		t.Fatalf("expected compact tools transcript to omit descriptions, got %q", toolsText)
+	}
+	if !strings.Contains(toolsText, "TOOL CALL FORMAT") || !strings.Contains(toolsText, "<|DSML|tool_calls>") {
+		t.Fatalf("expected tools transcript to include tool format instructions, got %q", toolsText)
 	}
 	if !strings.Contains(out.FinalPrompt, "Continue from the latest state in the attached TOOL_GATEWAY_HISTORY.txt context.") || !strings.Contains(out.FinalPrompt, "TOOL_GATEWAY_TOOLS.txt") {
 		t.Fatalf("expected live prompt to reference both context files, got %q", out.FinalPrompt)
 	}
-	if !strings.Contains(out.FinalPrompt, "TOOL CALL FORMAT") || !strings.Contains(out.FinalPrompt, "Remember: The ONLY valid way to use tools") {
-		t.Fatalf("expected live prompt to retain tool format instructions, got %q", out.FinalPrompt)
+	if strings.Contains(out.FinalPrompt, "TOOL CALL FORMAT") || strings.Contains(out.FinalPrompt, "<|DSML|tool_calls>") {
+		t.Fatalf("expected live prompt to externalize tool format instructions, got %q", out.FinalPrompt)
 	}
 	if strings.Contains(out.FinalPrompt, "You have access to these tools") || strings.Contains(out.FinalPrompt, "Description: search docs") || strings.Contains(out.FinalPrompt, "Parameters:") {
 		t.Fatalf("expected live prompt to omit tool descriptions after tools upload, got %q", out.FinalPrompt)
@@ -448,8 +447,8 @@ func TestApplyCurrentInputFileUploadsToolsContextSeparately(t *testing.T) {
 	if len(out.RefFileIDs) < 2 || out.RefFileIDs[0] != "file-inline-1" || out.RefFileIDs[1] != "file-inline-2" {
 		t.Fatalf("expected history and tools file ids first, got %#v", out.RefFileIDs)
 	}
-	if !strings.Contains(out.PromptTokenText, "# TOOL_GATEWAY_HISTORY.txt") || !strings.Contains(out.PromptTokenText, "# TOOL_GATEWAY_TOOLS.txt") || !strings.Contains(out.PromptTokenText, "Description: search docs") {
-		t.Fatalf("expected prompt token text to include uploaded history and tools content, got %q", out.PromptTokenText)
+	if !strings.Contains(out.PromptTokenText, "# TOOL_GATEWAY_HISTORY.txt") || !strings.Contains(out.PromptTokenText, "# TOOL_GATEWAY_TOOLS.txt") || !strings.Contains(out.PromptTokenText, "Tool: search") || !strings.Contains(out.PromptTokenText, `Parameters: {"type":"object"}`) {
+		t.Fatalf("expected prompt token text to include uploaded history and compact tools content, got %q", out.PromptTokenText)
 	}
 }
 
@@ -470,7 +469,7 @@ func TestApplyCurrentInputFileCarriesHistoryText(t *testing.T) {
 		t.Fatalf("normalize failed: %v", err)
 	}
 
-	out, err := h.applyCurrentInputFile(context.Background(), &auth.RequestAuth{DeepSeekToken: "token"}, stdReq)
+	out, err := h.applyCurrentInputFile(context.Background(), &auth.RequestAuth{CallerID: "caller:test"}, stdReq)
 	if err != nil {
 		t.Fatalf("apply current input file failed: %v", err)
 	}
@@ -657,12 +656,15 @@ func TestResponsesCurrentInputFileUploadsToolsSeparately(t *testing.T) {
 		t.Fatalf("history transcript should not embed tool descriptions, got %q", historyText)
 	}
 	toolsText := string(ds.uploadCalls[1].Data)
-	if !strings.Contains(toolsText, "# TOOL_GATEWAY_TOOLS.txt") || !strings.Contains(toolsText, "Tool: search") || !strings.Contains(toolsText, "Description: search docs") {
-		t.Fatalf("expected tools transcript to include schema, got %q", toolsText)
+	if !strings.Contains(toolsText, "# TOOL_GATEWAY_TOOLS.txt") || !strings.Contains(toolsText, "Tool: search") || !strings.Contains(toolsText, "Description: search docs") || !strings.Contains(toolsText, "TOOL CALL FORMAT") {
+		t.Fatalf("expected tools transcript to include schema and format instructions, got %q", toolsText)
 	}
 	promptText, _ := ds.completionReq["prompt"].(string)
-	if !strings.Contains(promptText, "TOOL_GATEWAY_TOOLS.txt") || !strings.Contains(promptText, "TOOL CALL FORMAT") {
-		t.Fatalf("expected live prompt to reference tools file and retain format instructions, got %q", promptText)
+	if !strings.Contains(promptText, "TOOL_GATEWAY_TOOLS.txt") {
+		t.Fatalf("expected live prompt to reference tools file, got %q", promptText)
+	}
+	if strings.Contains(promptText, "TOOL CALL FORMAT") || strings.Contains(promptText, "<|DSML|tool_calls>") {
+		t.Fatalf("expected live prompt to externalize format instructions, got %q", promptText)
 	}
 	if strings.Contains(promptText, "Description: search docs") {
 		t.Fatalf("live prompt should not inline tool descriptions, got %q", promptText)

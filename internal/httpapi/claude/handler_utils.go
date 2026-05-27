@@ -1,12 +1,12 @@
 package claude
 
 import (
-	"tool-gateway/internal/toolcall"
 	"encoding/json"
 	"fmt"
 	"strings"
 
 	"tool-gateway/internal/prompt"
+	"tool-gateway/internal/toolcall"
 )
 
 func normalizeClaudeMessages(messages []any) []any {
@@ -24,90 +24,152 @@ func normalizeClaudeMessages(messages []any) []any {
 		role := strings.ToLower(strings.TrimSpace(fmt.Sprintf("%v", msg["role"])))
 		switch content := msg["content"].(type) {
 		case []any:
-			textParts := make([]string, 0, len(content))
-			pendingThinking := ""
-			flushText := func() {
-				if len(textParts) == 0 {
-					return
-				}
-				message := map[string]any{
-					"role":    role,
-					"content": strings.Join(textParts, "\n"),
-				}
-				if role == "assistant" && strings.TrimSpace(pendingThinking) != "" {
-					message["reasoning_content"] = pendingThinking
-					message["content"] = prependClaudeReasoningForPrompt(pendingThinking, safeStringValue(message["content"]))
-					pendingThinking = ""
-				}
-				out = append(out, message)
-				textParts = textParts[:0]
-			}
-			for _, block := range content {
-				b, ok := block.(map[string]any)
-				if !ok {
-					continue
-				}
-				typeStr := strings.ToLower(strings.TrimSpace(fmt.Sprintf("%v", b["type"])))
-				switch typeStr {
-				case "text":
-					if t, ok := b["text"].(string); ok {
-						textParts = append(textParts, t)
-					}
-				case "thinking":
-					if role == "assistant" {
-						if thinking := extractClaudeThinkingBlockText(b); thinking != "" {
-							if pendingThinking == "" {
-								pendingThinking = thinking
-							} else {
-								pendingThinking += "\n" + thinking
-							}
-						}
-						continue
-					}
-					if raw := strings.TrimSpace(formatClaudeUnknownBlockForPrompt(b)); raw != "" {
-						textParts = append(textParts, raw)
-					}
-				case "tool_use":
-					if role == "assistant" {
-						flushText()
-						if toolMsg := normalizeClaudeToolUseToAssistant(b, state); toolMsg != nil {
-							if strings.TrimSpace(pendingThinking) != "" {
-								toolMsg["reasoning_content"] = pendingThinking
-								toolMsg["content"] = prependClaudeReasoningForPrompt(pendingThinking, safeStringValue(toolMsg["content"]))
-								pendingThinking = ""
-							}
-							out = append(out, toolMsg)
-						}
-						continue
-					}
-					if raw := strings.TrimSpace(formatClaudeUnknownBlockForPrompt(b)); raw != "" {
-						textParts = append(textParts, raw)
-					}
-				case "tool_result":
-					flushText()
-					if toolMsg := normalizeClaudeToolResultToToolMessage(b, state); toolMsg != nil {
-						out = append(out, toolMsg)
-					}
-				default:
-					if raw := strings.TrimSpace(formatClaudeUnknownBlockForPrompt(b)); raw != "" {
-						textParts = append(textParts, raw)
-					}
-				}
-			}
-			flushText()
-			if role == "assistant" && strings.TrimSpace(pendingThinking) != "" {
-				out = append(out, map[string]any{
-					"role":              "assistant",
-					"reasoning_content": pendingThinking,
-					"content":           formatClaudeReasoningForPrompt(pendingThinking),
-				})
-			}
+			out = normalizeClaudeContentBlocks(out, role, content, state)
 		default:
 			copied := cloneMap(msg)
 			out = append(out, copied)
 		}
 	}
 	return out
+}
+
+func normalizeClaudeContentBlocks(out []any, role string, content []any, state *claudeToolCallState) []any {
+	contentParts := make([]any, 0, len(content))
+	textParts := make([]string, 0, len(content))
+	pendingThinking := ""
+	flushText := func() {
+		if len(textParts) == 0 {
+			return
+		}
+		text := strings.Join(textParts, "\n")
+		if role == "assistant" && strings.TrimSpace(pendingThinking) != "" {
+			out = append(out, map[string]any{
+				"role":              role,
+				"content":           prependClaudeReasoningForPrompt(pendingThinking, text),
+				"reasoning_content": pendingThinking,
+			})
+			pendingThinking = ""
+		} else if len(contentParts) > 0 {
+			contentParts = append(contentParts, map[string]any{"type": "text", "text": text})
+		} else {
+			out = append(out, map[string]any{"role": role, "content": text})
+		}
+		textParts = textParts[:0]
+	}
+	flushTextToParts := func() {
+		if len(textParts) == 0 {
+			return
+		}
+		contentParts = append(contentParts, map[string]any{"type": "text", "text": strings.Join(textParts, "\n")})
+		textParts = textParts[:0]
+	}
+	flushParts := func() {
+		if len(contentParts) > 0 {
+			flushTextToParts()
+		} else {
+			flushText()
+		}
+		if len(contentParts) > 0 {
+			out = append(out, map[string]any{"role": role, "content": contentParts})
+			contentParts = nil
+		}
+	}
+	for _, block := range content {
+		b, ok := block.(map[string]any)
+		if !ok {
+			continue
+		}
+		typeStr := strings.ToLower(strings.TrimSpace(fmt.Sprintf("%v", b["type"])))
+		switch typeStr {
+		case "text":
+			if t, ok := b["text"].(string); ok {
+				textParts = append(textParts, t)
+			}
+		case "image":
+			if role == "user" {
+				flushTextToParts()
+				if part := claudeImageBlockToOpenAIImageURL(b); part != nil {
+					contentParts = append(contentParts, part)
+				}
+				continue
+			}
+			if raw := strings.TrimSpace(formatClaudeUnknownBlockForPrompt(b)); raw != "" {
+				textParts = append(textParts, raw)
+			}
+		case "thinking":
+			if role == "assistant" {
+				if thinking := extractClaudeThinkingBlockText(b); thinking != "" {
+					if pendingThinking == "" {
+						pendingThinking = thinking
+					} else {
+						pendingThinking += "\n" + thinking
+					}
+				}
+				continue
+			}
+			if raw := strings.TrimSpace(formatClaudeUnknownBlockForPrompt(b)); raw != "" {
+				textParts = append(textParts, raw)
+			}
+		case "tool_use":
+			if role == "assistant" {
+				flushParts()
+				if toolMsg := normalizeClaudeToolUseToAssistant(b, state); toolMsg != nil {
+					if strings.TrimSpace(pendingThinking) != "" {
+						toolMsg["reasoning_content"] = pendingThinking
+						toolMsg["content"] = prependClaudeReasoningForPrompt(pendingThinking, safeStringValue(toolMsg["content"]))
+						pendingThinking = ""
+					}
+					out = append(out, toolMsg)
+				}
+				continue
+			}
+			if raw := strings.TrimSpace(formatClaudeUnknownBlockForPrompt(b)); raw != "" {
+				textParts = append(textParts, raw)
+			}
+		case "tool_result":
+			flushParts()
+			if toolMsg := normalizeClaudeToolResultToToolMessage(b, state); toolMsg != nil {
+				out = append(out, toolMsg)
+			}
+		default:
+			if raw := strings.TrimSpace(formatClaudeUnknownBlockForPrompt(b)); raw != "" {
+				textParts = append(textParts, raw)
+			}
+		}
+	}
+	flushParts()
+	if role == "assistant" && strings.TrimSpace(pendingThinking) != "" {
+		out = append(out, map[string]any{
+			"role":              "assistant",
+			"reasoning_content": pendingThinking,
+			"content":           formatClaudeReasoningForPrompt(pendingThinking),
+		})
+	}
+	return out
+}
+
+func claudeImageBlockToOpenAIImageURL(block map[string]any) map[string]any {
+	source, ok := block["source"].(map[string]any)
+	if !ok {
+		return nil
+	}
+	if strings.ToLower(strings.TrimSpace(safeStringValue(source["type"]))) != "base64" {
+		return nil
+	}
+	data := strings.TrimSpace(safeStringValue(source["data"]))
+	if data == "" || data == "[omitted_binary_payload]" {
+		return nil
+	}
+	mediaType := strings.TrimSpace(safeStringValue(source["media_type"]))
+	if mediaType == "" {
+		mediaType = "image/png"
+	}
+	return map[string]any{
+		"type": "image_url",
+		"image_url": map[string]any{
+			"url": "data:" + mediaType + ";base64," + data,
+		},
+	}
 }
 
 func prependClaudeReasoningForPrompt(reasoning, content string) string {

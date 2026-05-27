@@ -9,7 +9,6 @@ import (
 	"testing"
 	"time"
 
-	"tool-gateway/internal/account"
 	"tool-gateway/internal/auth"
 	"tool-gateway/internal/config"
 	dsclient "tool-gateway/internal/deepseek/client"
@@ -68,7 +67,7 @@ func TestVercelInternalSecret(t *testing.T) {
 
 func TestStreamLeaseLifecycle(t *testing.T) {
 	h := &Handler{}
-	leaseID := h.holdStreamLease(&auth.RequestAuth{UseConfigToken: false}, promptcompat.StandardRequest{}, "test-session-id")
+	leaseID := h.holdStreamLease(&auth.RequestAuth{}, promptcompat.StandardRequest{}, "test-session-id")
 	if leaseID == "" {
 		t.Fatalf("expected non-empty lease id")
 	}
@@ -221,55 +220,46 @@ type vercelReleaseAutoDeleteDSStub struct {
 	events           *[]string
 }
 
-func (m *vercelReleaseAutoDeleteDSStub) CreateSession(_ context.Context, _ *auth.RequestAuth, _ int) (string, error) {
+func (m *vercelReleaseAutoDeleteDSStub) CreateSession(_ context.Context, _ int) (string, error) {
 	return "session-id", nil
 }
 
-func (m *vercelReleaseAutoDeleteDSStub) GetPow(_ context.Context, _ *auth.RequestAuth, _ int) (string, error) {
+func (m *vercelReleaseAutoDeleteDSStub) GetPow(_ context.Context, _ int) (string, error) {
 	return "pow", nil
 }
 
-func (m *vercelReleaseAutoDeleteDSStub) UploadFile(_ context.Context, _ *auth.RequestAuth, _ dsclient.UploadFileRequest, _ int) (*dsclient.UploadFileResult, error) {
+func (m *vercelReleaseAutoDeleteDSStub) UploadFile(_ context.Context, _ dsclient.UploadFileRequest, _ int) (*dsclient.UploadFileResult, error) {
 	return &dsclient.UploadFileResult{ID: "file-id", Filename: "file.txt", Bytes: 1, Status: "uploaded"}, nil
 }
 
-func (m *vercelReleaseAutoDeleteDSStub) CallCompletion(_ context.Context, _ *auth.RequestAuth, _ map[string]any, _ string, _ int) (*http.Response, error) {
+func (m *vercelReleaseAutoDeleteDSStub) CallCompletion(_ context.Context, _ map[string]any, _ string) (*http.Response, error) {
 	return m.resp, nil
 }
 
-func (m *vercelReleaseAutoDeleteDSStub) DeleteSessionForToken(_ context.Context, token string, sessionID string) (*dsclient.DeleteSessionResult, error) {
+func (m *vercelReleaseAutoDeleteDSStub) DeleteSession(_ context.Context, sessionID string, _ int) (*dsclient.DeleteSessionResult, error) {
 	if m.events != nil {
 		*m.events = append(*m.events, "delete")
 	}
 	m.deleteCallCount++
 	m.deletedSessionID = sessionID
-	m.deletedToken = token
 	if m.deleteErr != nil {
 		return nil, m.deleteErr
 	}
 	return &dsclient.DeleteSessionResult{SessionID: sessionID, Success: true}, nil
 }
 
-func (m *vercelReleaseAutoDeleteDSStub) DeleteAllSessionsForToken(_ context.Context, _ string) error {
+func (m *vercelReleaseAutoDeleteDSStub) DeleteAllSessions(_ context.Context) error {
 	return nil
 }
 
-type vercelReleaseAuthStub struct {
-	events *[]string
-}
+type vercelReleaseAuthStub struct{}
 
 func (a *vercelReleaseAuthStub) Determine(_ *http.Request) (*auth.RequestAuth, error) {
-	return &auth.RequestAuth{DeepSeekToken: "test-token", AccountID: "test-account"}, nil
+	return &auth.RequestAuth{CallerID: "caller:test"}, nil
 }
 
 func (a *vercelReleaseAuthStub) DetermineCaller(_ *http.Request) (*auth.RequestAuth, error) {
-	return &auth.RequestAuth{DeepSeekToken: "test-token", AccountID: "test-account"}, nil
-}
-
-func (a *vercelReleaseAuthStub) Release(_ *auth.RequestAuth) {
-	if a.events != nil {
-		*a.events = append(*a.events, "release")
-	}
+	return &auth.RequestAuth{CallerID: "caller:test"}, nil
 }
 
 func TestHandleVercelStreamReleaseTriggersAutoDelete(t *testing.T) {
@@ -282,11 +272,11 @@ func TestHandleVercelStreamReleaseTriggersAutoDelete(t *testing.T) {
 		Store: mockOpenAIConfig{
 			autoDeleteMode: "single",
 		},
-		Auth:    &vercelReleaseAuthStub{events: &events},
+		Auth:    &vercelReleaseAuthStub{},
 		Backend: ds,
 	}
 
-	leaseID := h.holdStreamLease(&auth.RequestAuth{DeepSeekToken: "test-token", AccountID: "test-account"}, promptcompat.StandardRequest{}, "session-to-delete")
+	leaseID := h.holdStreamLease(&auth.RequestAuth{CallerID: "caller:test"}, promptcompat.StandardRequest{}, "session-to-delete")
 	if leaseID == "" {
 		t.Fatalf("expected non-empty lease id")
 	}
@@ -309,8 +299,8 @@ func TestHandleVercelStreamReleaseTriggersAutoDelete(t *testing.T) {
 	if ds.deletedSessionID != "session-to-delete" {
 		t.Fatalf("expected deleted session id=session-to-delete, got %q", ds.deletedSessionID)
 	}
-	if got, want := strings.Join(events, ","), "delete,release"; got != want {
-		t.Fatalf("expected auto-delete before auth release, got %s", got)
+	if got, want := strings.Join(events, ","), "delete"; got != want {
+		t.Fatalf("expected auto-delete event, got %s", got)
 	}
 }
 
@@ -370,9 +360,15 @@ func TestHandleVercelStreamPrepareUploadsToolsSeparately(t *testing.T) {
 	finalPrompt, _ := body["final_prompt"].(string)
 	payload, _ := body["payload"].(map[string]any)
 	payloadPrompt, _ := payload["prompt"].(string)
+	if !strings.Contains(string(ds.uploadCalls[1].Data), "TOOL CALL FORMAT") || !strings.Contains(string(ds.uploadCalls[1].Data), "<|DSML|tool_calls>") {
+		t.Fatalf("expected tools upload to contain tool-call format rules, got %q", string(ds.uploadCalls[1].Data))
+	}
 	for label, promptText := range map[string]string{"final_prompt": finalPrompt, "payload.prompt": payloadPrompt} {
-		if !strings.Contains(promptText, "TOOL_GATEWAY_TOOLS.txt") || !strings.Contains(promptText, "TOOL CALL FORMAT") {
-			t.Fatalf("expected %s to reference tools file and retain tool instructions, got %q", label, promptText)
+		if !strings.Contains(promptText, "TOOL_GATEWAY_TOOLS.txt") {
+			t.Fatalf("expected %s to reference tools file, got %q", label, promptText)
+		}
+		if strings.Contains(promptText, "TOOL CALL FORMAT") || strings.Contains(promptText, "<|DSML|tool_calls>") {
+			t.Fatalf("expected %s not to inline tool-call format rules, got %q", label, promptText)
 		}
 		if strings.Contains(promptText, "Description: search docs") {
 			t.Fatalf("expected %s not to inline tool descriptions, got %q", label, promptText)
@@ -395,7 +391,7 @@ func TestHandleVercelStreamPrepareMapsCurrentInputFileManagedAuthFailureTo401(t 
 		Store: mockOpenAIConfig{
 			currentInputEnabled: true,
 		},
-		Auth:    streamStatusManagedAuthStub{},
+		Auth:    streamStatusAuthStub{},
 		Backend: ds,
 	}
 
@@ -423,24 +419,15 @@ func TestHandleVercelStreamPrepareMapsCurrentInputFileManagedAuthFailureTo401(t 
 func TestHandleVercelStreamSwitchReuploadsCurrentInputFile(t *testing.T) {
 	t.Setenv("VERCEL", "1")
 	t.Setenv("TOOL_GATEWAY_VERCEL_INTERNAL_SECRET", "stream-secret")
-	t.Setenv("TOOL_GATEWAY_CONFIG_JSON", `{
-		"keys":["managed-key"],
-		"accounts":[
-			{"email":"acc1@test.com","password":"pwd"},
-			{"email":"acc2@test.com","password":"pwd"}
-		]
-	}`)
+	t.Setenv("TOOL_GATEWAY_CONFIG_JSON", `{"keys":["test-key"]}`)
 	store := config.LoadStore()
-	resolver := auth.NewResolver(store, account.NewPool(store), func(_ context.Context, acc config.Account) (string, error) {
-		return "token-" + acc.Identifier(), nil
-	})
+	resolver := auth.NewResolver(store)
 	authReq := httptest.NewRequest(http.MethodPost, "/", nil)
-	authReq.Header.Set("Authorization", "Bearer managed-key")
+	authReq.Header.Set("Authorization", "Bearer test-key")
 	a, err := resolver.Determine(authReq)
 	if err != nil {
 		t.Fatalf("determine failed: %v", err)
 	}
-	defer resolver.Release(a)
 
 	ds := &inlineUploadBackendStub{}
 	h := &Handler{
@@ -478,29 +465,7 @@ func TestHandleVercelStreamSwitchReuploadsCurrentInputFile(t *testing.T) {
 
 	h.handleVercelStreamSwitch(rec, req)
 
-	if rec.Code != http.StatusOK {
-		t.Fatalf("expected 200, got %d body=%s", rec.Code, rec.Body.String())
-	}
-	if len(ds.uploadCalls) != 2 {
-		t.Fatalf("expected current input and tools reupload on switched account, got %d", len(ds.uploadCalls))
-	}
-	if ds.uploadCalls[0].Filename != "TOOL_GATEWAY_HISTORY.txt" || ds.uploadCalls[1].Filename != "TOOL_GATEWAY_TOOLS.txt" {
-		t.Fatalf("unexpected reupload filenames: %#v", ds.uploadCalls)
-	}
-	var body map[string]any
-	if err := json.NewDecoder(rec.Body).Decode(&body); err != nil {
-		t.Fatalf("decode failed: %v", err)
-	}
-	if body["deepseek_token"] != "token-acc2@test.com" {
-		t.Fatalf("expected switched account token, got %#v", body["deepseek_token"])
-	}
-	payload, _ := body["payload"].(map[string]any)
-	refIDs, _ := payload["ref_file_ids"].([]any)
-	if len(refIDs) != 3 || refIDs[0] != "file-inline-1" || refIDs[1] != "file-inline-2" || refIDs[2] != "client-file" {
-		t.Fatalf("expected reuploaded current input ref plus client ref, got %#v", payload["ref_file_ids"])
-	}
-	promptText, _ := payload["prompt"].(string)
-	if !strings.Contains(promptText, "TOOL_GATEWAY_TOOLS.txt") {
-		t.Fatalf("expected switched payload prompt to retain tools file reference, got %q", promptText)
+	if rec.Code != http.StatusTooManyRequests {
+		t.Fatalf("expected 429, got %d body=%s", rec.Code, rec.Body.String())
 	}
 }

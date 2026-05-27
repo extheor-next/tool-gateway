@@ -2,7 +2,6 @@ package openai
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -10,7 +9,6 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"tool-gateway/internal/account"
 	"tool-gateway/internal/auth"
 	"tool-gateway/internal/config"
 )
@@ -19,10 +17,7 @@ func newResolverWithConfigJSON(t *testing.T, cfgJSON string) (*config.Store, *au
 	t.Helper()
 	t.Setenv("TOOL_GATEWAY_CONFIG_JSON", cfgJSON)
 	store := config.LoadStore()
-	pool := account.NewPool(store)
-	resolver := auth.NewResolver(store, pool, func(_ context.Context, _ config.Account) (string, error) {
-		return "unused", nil
-	})
+	resolver := auth.NewResolver(store)
 	return store, resolver
 }
 

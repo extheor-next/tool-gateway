@@ -86,7 +86,7 @@ func (h *openAITestSurface) ChatCompletions(w http.ResponseWriter, r *http.Reque
 func (h *openAITestSurface) applyCurrentInputFile(ctx context.Context, a *auth.RequestAuth, stdReq promptcompat.StandardRequest) (promptcompat.StandardRequest, error) {
 	stdReq = shared.ApplyThinkingInjection(h.Store, stdReq)
 	svc := history.Service{Store: h.Store, Backend: h.Backend}
-	out, err := svc.ApplyCurrentInputFile(ctx, a, stdReq)
+	out, err := svc.ApplyCurrentInputFile(ctx, stdReq)
 	if err != nil || out.CurrentInputFileApplied {
 		return out, err
 	}
@@ -94,7 +94,7 @@ func (h *openAITestSurface) applyCurrentInputFile(ctx context.Context, a *auth.R
 }
 
 func (h *openAITestSurface) preprocessInlineFileInputs(ctx context.Context, a *auth.RequestAuth, req map[string]any) error {
-	return h.filesHandler().PreprocessInlineFileInputs(ctx, a, req)
+	return h.filesHandler().PreprocessInlineFileInputs(ctx, req)
 }
 
 func registerOpenAITestRoutes(r chi.Router, h *openAITestSurface) {

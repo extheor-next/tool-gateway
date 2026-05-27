@@ -23,15 +23,17 @@ type ModelsHandler struct {
 }
 
 func (h *ModelsHandler) ListModels(w http.ResponseWriter, _ *http.Request) {
-	cfg := h.ExtStore.ExternalAI()
-	if strings.TrimSpace(cfg.BaseURL) != "" {
-		models, ok := h.fetchFromProvider(cfg.BaseURL, cfg.APIKey)
-		if ok {
-			WriteJSON(w, http.StatusOK, models)
-			return
+	if h.ExtStore != nil {
+		cfg := h.ExtStore.ExternalAI()
+		if strings.TrimSpace(cfg.BaseURL) != "" {
+			models, ok := h.fetchFromProvider(cfg.BaseURL, cfg.APIKey)
+			if ok {
+				WriteJSON(w, http.StatusOK, models)
+				return
+			}
 		}
 	}
-	WriteJSON(w, http.StatusOK, emptyModelsResponse())
+	WriteJSON(w, http.StatusOK, config.OpenAIModelsResponse())
 }
 
 func (h *ModelsHandler) fetchFromProvider(baseURL, apiKey string) (map[string]any, bool) {
@@ -67,27 +69,29 @@ func (h *ModelsHandler) fetchFromProvider(baseURL, apiKey string) (map[string]an
 	return result, true
 }
 
-func emptyModelsResponse() map[string]any {
-	return map[string]any{"object": "list", "data": []any{}}
-}
-
 func (h *ModelsHandler) GetModel(w http.ResponseWriter, r *http.Request) {
 	modelID := strings.TrimSpace(chi.URLParam(r, "model_id"))
-	cfg := h.ExtStore.ExternalAI()
-	if strings.TrimSpace(cfg.BaseURL) != "" {
-		models, ok := h.fetchFromProvider(cfg.BaseURL, cfg.APIKey)
-		if ok {
-			if data, ok := models["data"].([]any); ok {
-				for _, item := range data {
-					if m, ok := item.(map[string]any); ok {
-						if id, _ := m["id"].(string); id == modelID {
-							WriteJSON(w, http.StatusOK, m)
-							return
+	if h.ExtStore != nil {
+		cfg := h.ExtStore.ExternalAI()
+		if strings.TrimSpace(cfg.BaseURL) != "" {
+			models, ok := h.fetchFromProvider(cfg.BaseURL, cfg.APIKey)
+			if ok {
+				if data, ok := models["data"].([]any); ok {
+					for _, item := range data {
+						if m, ok := item.(map[string]any); ok {
+							if id, _ := m["id"].(string); id == modelID {
+								WriteJSON(w, http.StatusOK, m)
+								return
+							}
 						}
 					}
 				}
 			}
 		}
+	}
+	if model, ok := config.OpenAIModelByID(h.Store, modelID); ok {
+		WriteJSON(w, http.StatusOK, model)
+		return
 	}
 	WriteOpenAIError(w, http.StatusNotFound, "Model not found.")
 }

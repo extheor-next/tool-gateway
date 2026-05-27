@@ -20,6 +20,7 @@ type mockOpenAIConfig struct {
 	embedProv           string
 	currentInputEnabled bool
 	currentInputMin     int
+	currentInputMaxKeep int
 	thinkingInjection   *bool
 	thinkingPrompt      string
 }
@@ -40,6 +41,9 @@ func (m mockOpenAIConfig) CurrentInputFileEnabled() bool { return m.currentInput
 func (m mockOpenAIConfig) CurrentInputFileMinChars() int {
 	return m.currentInputMin
 }
+func (m mockOpenAIConfig) CurrentInputFileMaxKeepMessages() int {
+	return m.currentInputMaxKeep
+}
 func (m mockOpenAIConfig) ThinkingInjectionEnabled() bool {
 	if m.thinkingInjection == nil {
 		return false
@@ -51,63 +55,38 @@ func (m mockOpenAIConfig) ThinkingInjectionPrompt() string { return m.thinkingPr
 type streamStatusAuthStub struct{}
 
 func (streamStatusAuthStub) Determine(_ *http.Request) (*auth.RequestAuth, error) {
-	return &auth.RequestAuth{
-		UseConfigToken: false,
-		DeepSeekToken:  "direct-token",
-		CallerID:       "caller:test",
-		TriedAccounts:  map[string]bool{},
-	}, nil
+	return &auth.RequestAuth{CallerID: "caller:test"}, nil
 }
 
 func (streamStatusAuthStub) DetermineCaller(_ *http.Request) (*auth.RequestAuth, error) {
 	return (&streamStatusAuthStub{}).Determine(nil)
 }
 
-func (streamStatusAuthStub) Release(_ *auth.RequestAuth) {}
-
-type streamStatusManagedAuthStub struct{}
-
-func (streamStatusManagedAuthStub) Determine(_ *http.Request) (*auth.RequestAuth, error) {
-	return &auth.RequestAuth{
-		UseConfigToken: true,
-		DeepSeekToken:  "managed-token",
-		CallerID:       "caller:test",
-		AccountID:      "acct:test",
-		TriedAccounts:  map[string]bool{},
-	}, nil
-}
-
-func (streamStatusManagedAuthStub) DetermineCaller(_ *http.Request) (*auth.RequestAuth, error) {
-	return (&streamStatusManagedAuthStub{}).Determine(nil)
-}
-
-func (streamStatusManagedAuthStub) Release(_ *auth.RequestAuth) {}
-
 type streamStatusBackendStub struct {
 	resp *http.Response
 }
 
-func (m streamStatusBackendStub) CreateSession(_ context.Context, _ *auth.RequestAuth, _ int) (string, error) {
+func (m streamStatusBackendStub) CreateSession(_ context.Context, _ int) (string, error) {
 	return "session-id", nil
 }
 
-func (m streamStatusBackendStub) GetPow(_ context.Context, _ *auth.RequestAuth, _ int) (string, error) {
+func (m streamStatusBackendStub) GetPow(_ context.Context, _ int) (string, error) {
 	return "pow", nil
 }
 
-func (m streamStatusBackendStub) UploadFile(_ context.Context, _ *auth.RequestAuth, _ dsclient.UploadFileRequest, _ int) (*dsclient.UploadFileResult, error) {
+func (m streamStatusBackendStub) UploadFile(_ context.Context, _ dsclient.UploadFileRequest, _ int) (*dsclient.UploadFileResult, error) {
 	return &dsclient.UploadFileResult{ID: "file-id", Filename: "file.txt", Bytes: 1, Status: "uploaded"}, nil
 }
 
-func (m streamStatusBackendStub) CallCompletion(_ context.Context, _ *auth.RequestAuth, _ map[string]any, _ string, _ int) (*http.Response, error) {
+func (m streamStatusBackendStub) CallCompletion(_ context.Context, _ map[string]any, _ string) (*http.Response, error) {
 	return m.resp, nil
 }
 
-func (m streamStatusBackendStub) DeleteSessionForToken(_ context.Context, _ string, _ string) (*dsclient.DeleteSessionResult, error) {
+func (m streamStatusBackendStub) DeleteSession(_ context.Context, _ string, _ int) (*dsclient.DeleteSessionResult, error) {
 	return &dsclient.DeleteSessionResult{Success: true}, nil
 }
 
-func (m streamStatusBackendStub) DeleteAllSessionsForToken(_ context.Context, _ string) error {
+func (m streamStatusBackendStub) DeleteAllSessions(_ context.Context) error {
 	return nil
 }
 
@@ -132,18 +111,18 @@ type inlineUploadBackendStub struct {
 	completionResp *http.Response
 }
 
-func (m *inlineUploadBackendStub) CreateSession(_ context.Context, _ *auth.RequestAuth, _ int) (string, error) {
+func (m *inlineUploadBackendStub) CreateSession(_ context.Context, _ int) (string, error) {
 	if strings.TrimSpace(m.createSession) == "" {
 		return "session-id", nil
 	}
 	return m.createSession, nil
 }
 
-func (m *inlineUploadBackendStub) GetPow(_ context.Context, _ *auth.RequestAuth, _ int) (string, error) {
+func (m *inlineUploadBackendStub) GetPow(_ context.Context, _ int) (string, error) {
 	return "pow", nil
 }
 
-func (m *inlineUploadBackendStub) UploadFile(ctx context.Context, _ *auth.RequestAuth, req dsclient.UploadFileRequest, _ int) (*dsclient.UploadFileResult, error) {
+func (m *inlineUploadBackendStub) UploadFile(ctx context.Context, req dsclient.UploadFileRequest, _ int) (*dsclient.UploadFileResult, error) {
 	m.lastCtx = ctx
 	m.uploadCalls = append(m.uploadCalls, req)
 	if m.uploadErr != nil {
@@ -162,7 +141,7 @@ func (m *inlineUploadBackendStub) UploadFile(ctx context.Context, _ *auth.Reques
 	}, nil
 }
 
-func (m *inlineUploadBackendStub) CallCompletion(_ context.Context, _ *auth.RequestAuth, payload map[string]any, _ string, _ int) (*http.Response, error) {
+func (m *inlineUploadBackendStub) CallCompletion(_ context.Context, payload map[string]any, _ string) (*http.Response, error) {
 	m.completionReq = payload
 	if m.completionResp != nil {
 		return m.completionResp, nil
@@ -173,13 +152,15 @@ func (m *inlineUploadBackendStub) CallCompletion(_ context.Context, _ *auth.Requ
 	), nil
 }
 
-func (m *inlineUploadBackendStub) DeleteSessionForToken(_ context.Context, _ string, _ string) (*dsclient.DeleteSessionResult, error) {
+func (m *inlineUploadBackendStub) DeleteSession(_ context.Context, _ string, _ int) (*dsclient.DeleteSessionResult, error) {
 	return &dsclient.DeleteSessionResult{Success: true}, nil
 }
 
-func (m *inlineUploadBackendStub) DeleteAllSessionsForToken(_ context.Context, _ string) error {
+func (m *inlineUploadBackendStub) DeleteAllSessions(_ context.Context) error {
 	return nil
 }
+
+func (m *inlineUploadBackendStub) ExternalAIAdapter() bool { return false }
 
 func historySplitTestMessages() []any {
 	toolCalls := []any{

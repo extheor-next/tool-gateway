@@ -19,21 +19,11 @@ import (
 type streamStatusAuthStub struct{}
 
 func (streamStatusAuthStub) Determine(_ *http.Request) (*auth.RequestAuth, error) {
-	return &auth.RequestAuth{
-		UseConfigToken: false,
-		DeepSeekToken:  "direct-token",
-		CallerID:       "caller:test",
-		TriedAccounts:  map[string]bool{},
-	}, nil
+	return &auth.RequestAuth{CallerID: "caller:test"}, nil
 }
 
 func (streamStatusAuthStub) DetermineCaller(_ *http.Request) (*auth.RequestAuth, error) {
-	return &auth.RequestAuth{
-		UseConfigToken: false,
-		DeepSeekToken:  "direct-token",
-		CallerID:       "caller:test",
-		TriedAccounts:  map[string]bool{},
-	}, nil
+	return &auth.RequestAuth{CallerID: "caller:test"}, nil
 }
 
 func (streamStatusAuthStub) Release(_ *auth.RequestAuth) {}
@@ -42,27 +32,27 @@ type streamStatusBackendStub struct {
 	resp *http.Response
 }
 
-func (m streamStatusBackendStub) CreateSession(_ context.Context, _ *auth.RequestAuth, _ int) (string, error) {
+func (m streamStatusBackendStub) CreateSession(_ context.Context, _ int) (string, error) {
 	return "session-id", nil
 }
 
-func (m streamStatusBackendStub) GetPow(_ context.Context, _ *auth.RequestAuth, _ int) (string, error) {
+func (m streamStatusBackendStub) GetPow(_ context.Context, _ int) (string, error) {
 	return "pow", nil
 }
 
-func (m streamStatusBackendStub) UploadFile(_ context.Context, _ *auth.RequestAuth, _ dsclient.UploadFileRequest, _ int) (*dsclient.UploadFileResult, error) {
+func (m streamStatusBackendStub) UploadFile(_ context.Context, _ dsclient.UploadFileRequest, _ int) (*dsclient.UploadFileResult, error) {
 	return &dsclient.UploadFileResult{ID: "file-id", Filename: "file.txt", Bytes: 1, Status: "uploaded"}, nil
 }
 
-func (m streamStatusBackendStub) CallCompletion(_ context.Context, _ *auth.RequestAuth, _ map[string]any, _ string, _ int) (*http.Response, error) {
+func (m streamStatusBackendStub) CallCompletion(_ context.Context, _ map[string]any, _ string) (*http.Response, error) {
 	return m.resp, nil
 }
 
-func (m streamStatusBackendStub) DeleteSessionForToken(_ context.Context, _ string, _ string) (*dsclient.DeleteSessionResult, error) {
+func (m streamStatusBackendStub) DeleteSession(_ context.Context, _ string, _ int) (*dsclient.DeleteSessionResult, error) {
 	return &dsclient.DeleteSessionResult{Success: true}, nil
 }
 
-func (m streamStatusBackendStub) DeleteAllSessionsForToken(_ context.Context, _ string) error {
+func (m streamStatusBackendStub) DeleteAllSessions(_ context.Context) error {
 	return nil
 }
 
@@ -71,19 +61,19 @@ type streamStatusDSSeqStub struct {
 	payloads []map[string]any
 }
 
-func (m *streamStatusDSSeqStub) CreateSession(_ context.Context, _ *auth.RequestAuth, _ int) (string, error) {
+func (m *streamStatusDSSeqStub) CreateSession(_ context.Context, _ int) (string, error) {
 	return "session-id", nil
 }
 
-func (m *streamStatusDSSeqStub) GetPow(_ context.Context, _ *auth.RequestAuth, _ int) (string, error) {
+func (m *streamStatusDSSeqStub) GetPow(_ context.Context, _ int) (string, error) {
 	return "pow", nil
 }
 
-func (m *streamStatusDSSeqStub) UploadFile(_ context.Context, _ *auth.RequestAuth, _ dsclient.UploadFileRequest, _ int) (*dsclient.UploadFileResult, error) {
+func (m *streamStatusDSSeqStub) UploadFile(_ context.Context, _ dsclient.UploadFileRequest, _ int) (*dsclient.UploadFileResult, error) {
 	return &dsclient.UploadFileResult{ID: "file-id", Filename: "file.txt", Bytes: 1, Status: "uploaded"}, nil
 }
 
-func (m *streamStatusDSSeqStub) CallCompletion(_ context.Context, _ *auth.RequestAuth, payload map[string]any, _ string, _ int) (*http.Response, error) {
+func (m *streamStatusDSSeqStub) CallCompletion(_ context.Context, payload map[string]any, _ string) (*http.Response, error) {
 	clone := make(map[string]any, len(payload))
 	for k, v := range payload {
 		clone[k] = v
@@ -96,11 +86,11 @@ func (m *streamStatusDSSeqStub) CallCompletion(_ context.Context, _ *auth.Reques
 	return m.resps[idx], nil
 }
 
-func (m *streamStatusDSSeqStub) DeleteSessionForToken(_ context.Context, _ string, _ string) (*dsclient.DeleteSessionResult, error) {
+func (m *streamStatusDSSeqStub) DeleteSession(_ context.Context, _ string, _ int) (*dsclient.DeleteSessionResult, error) {
 	return &dsclient.DeleteSessionResult{Success: true}, nil
 }
 
-func (m *streamStatusDSSeqStub) DeleteAllSessionsForToken(_ context.Context, _ string) error {
+func (m *streamStatusDSSeqStub) DeleteAllSessions(_ context.Context) error {
 	return nil
 }
 

@@ -58,7 +58,7 @@ func (s Service) ApplyCurrentInputFile(ctx context.Context, stdReq promptcompat.
 	if strings.TrimSpace(fileText) == "" {
 		return stdReq, errors.New("current user input file produced empty transcript")
 	}
-	toolsText, _ := promptcompat.BuildOpenAIToolsContextTranscript(stdReq.ToolsRaw, stdReq.ToolChoice)
+	toolsText, _ := promptcompat.BuildOpenAIToolsContextTranscriptForMessages(stdReq.ToolsRaw, stdReq.ToolChoice, stdReq.Messages)
 	modelType := "default"
 	if resolvedType, ok := config.GetModelType(stdReq.ResolvedModel); ok {
 		modelType = resolvedType
@@ -105,6 +105,7 @@ func (s Service) ApplyCurrentInputFile(ctx context.Context, stdReq promptcompat.
 
 	stdReq.Messages = messages
 	stdReq.HistoryText = fileText
+	stdReq.ToolsText = toolsText
 	stdReq.CurrentInputFileApplied = true
 	stdReq.CurrentInputFileID = fileID
 	stdReq.CurrentToolsFileID = toolFileID
@@ -149,7 +150,7 @@ func (s Service) ReuploadAppliedCurrentInputFile(ctx context.Context, stdReq pro
 		return stdReq, errors.New("upload current user input file returned empty file id")
 	}
 
-	toolsText, _ := promptcompat.BuildOpenAIToolsContextTranscript(stdReq.ToolsRaw, stdReq.ToolChoice)
+	toolsText, _ := promptcompat.BuildOpenAIToolsContextTranscriptForMessages(stdReq.ToolsRaw, stdReq.ToolChoice, stdReq.Messages)
 	toolFileID := ""
 	if strings.TrimSpace(toolsText) != "" {
 		result, err := s.Backend.UploadFile(ctx, dsclient.UploadFileRequest{
@@ -174,6 +175,33 @@ func (s Service) ReuploadAppliedCurrentInputFile(ctx context.Context, stdReq pro
 	return stdReq, nil
 }
 
+func latestUserImageParts(messages []any) []any {
+	for i := len(messages) - 1; i >= 0; i-- {
+		msg, ok := messages[i].(map[string]any)
+		if !ok || strings.ToLower(strings.TrimSpace(shared.AsString(msg["role"]))) != "user" {
+			continue
+		}
+		parts, ok := msg["content"].([]any)
+		if !ok {
+			continue
+		}
+		images := make([]any, 0)
+		for _, raw := range parts {
+			part, ok := raw.(map[string]any)
+			if !ok {
+				continue
+			}
+			if strings.ToLower(strings.TrimSpace(shared.AsString(part["type"]))) == "image_url" {
+				images = append(images, part)
+			}
+		}
+		if len(images) > 0 {
+			return images
+		}
+	}
+	return nil
+}
+
 func latestUserInputForFile(messages []any) (int, string) {
 	for i := len(messages) - 1; i >= 0; i-- {
 		msg, ok := messages[i].(map[string]any)
@@ -196,7 +224,7 @@ func latestUserInputForFile(messages []any) (int, string) {
 func currentInputFilePrompt(hasToolsFile bool) string {
 	prompt := "Continue from the latest state in the attached TOOL_GATEWAY_HISTORY.txt context. Treat it as the current working state and answer the latest user request directly."
 	if hasToolsFile {
-		prompt += " Available tool descriptions and parameter schemas are attached in TOOL_GATEWAY_TOOLS.txt; use only those tools and follow the tool-call format rules in this prompt."
+		prompt += " Available tool descriptions, parameter schemas, and tool-call format rules are attached in TOOL_GATEWAY_TOOLS.txt; use only those tools and follow the attached tool-call rules exactly."
 	}
 	return prompt
 }
@@ -252,13 +280,13 @@ func replaceGeneratedCurrentInputRefs(existing []string, oldHistoryID, oldToolsI
 	}
 	return prependUniqueRefFileIDs(filtered, newHistoryID, newToolsID)
 }
+
 type fileUploader interface {
 	UploadFileToProvider(ctx context.Context, filename string, content []byte) (string, error)
 }
 
 // applyTruncationForExternalProvider handles context splitting for external AI providers.
-// If the provider supports file upload (OpenAI-compatible Files API), the context is uploaded
-// as TOOL_GATEWAY_HISTORY.txt. Otherwise, messages are truncated.
+// The external adapter uploads context files when it builds the upstream request.
 func (s Service) applyTruncationForExternalProvider(stdReq promptcompat.StandardRequest) (promptcompat.StandardRequest, error) {
 	threshold := s.Store.CurrentInputFileMinChars()
 
@@ -283,31 +311,37 @@ func (s Service) applyTruncationForExternalProvider(stdReq promptcompat.Standard
 		return stdReq, nil
 	}
 
-	// External providers: truncate messages in place (no file upload needed)
-	maxKeep := s.Store.CurrentInputFileMaxKeepMessages()
-	keep := make([]any, 0)
-	i := 0
-	for i < len(stdReq.Messages) {
-		msg, ok := stdReq.Messages[i].(map[string]any)
-		if !ok {
-			i++
-			continue
-		}
-		role, _ := msg["role"].(string)
-		if role != "system" {
-			break
-		}
-		keep = append(keep, msg)
-		i++
+	fileText := promptcompat.BuildOpenAICurrentInputContextTranscript(stdReq.Messages)
+	if strings.TrimSpace(fileText) == "" {
+		return stdReq, errors.New("current user input file produced empty transcript")
 	}
-	nonSystem := stdReq.Messages[i:]
-	if len(nonSystem) > maxKeep {
-		nonSystem = nonSystem[len(nonSystem)-maxKeep:]
+	toolsText, toolNames := promptcompat.BuildOpenAIToolsContextTranscriptForMessages(stdReq.ToolsRaw, stdReq.ToolChoice, stdReq.Messages)
+	hasToolsFile := strings.TrimSpace(toolsText) != ""
+	promptText := currentInputFilePrompt(hasToolsFile)
+	messages := []any{
+		map[string]any{
+			"role":    "user",
+			"content": promptText,
+		},
 	}
-	keep = append(keep, nonSystem...)
-	stdReq.Messages = keep
+	if imageParts := latestUserImageParts(stdReq.Messages); len(imageParts) > 0 {
+		content := make([]any, 0, len(imageParts)+1)
+		content = append(content, map[string]string{"type": "text", "text": promptText})
+		content = append(content, imageParts...)
+		messages[0].(map[string]any)["content"] = content
+	}
+	stdReq.Messages = messages
+	stdReq.HistoryText = fileText
+	stdReq.ToolsText = toolsText
 	stdReq.CurrentInputFileApplied = true
 	stdReq.CurrentInputFileTruncated = true
-	stdReq.FinalPrompt, stdReq.ToolNames = promptcompat.BuildOpenAIPromptWithToolInstructionsOnly(keep, stdReq.ToolsRaw, "", stdReq.ToolChoice, stdReq.Thinking)
+	stdReq.FinalPrompt = promptText
+	stdReq.ToolNames = toolNames
+	tokenParts := []string{fileText}
+	if strings.TrimSpace(toolsText) != "" {
+		tokenParts = append(tokenParts, toolsText)
+	}
+	tokenParts = append(tokenParts, stdReq.FinalPrompt)
+	stdReq.PromptTokenText = strings.Join(tokenParts, "\n")
 	return stdReq, nil
 }
