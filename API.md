@@ -244,7 +244,15 @@ Content-Type: application/json
 | `messages` | array | ✅ | OpenAI 风格消息数组 |
 | `stream` | boolean | ❌ | 默认 `false` |
 | `tools` | array | ❌ | Function Calling 定义 |
-| `temperature` 等 | any | ❌ | 兼容透传字段（最终效果由上游决定） |
+| `temperature` 等 | any | ❌ | 兼容透传字段（最终效果由上游决定）；Kimi 等不支持部分采样参数的 OpenAI-compatible 供应商会自动跳过不兼容字段 |
+
+#### OpenAI-compatible / Kimi 图片与上下文适配
+
+当活跃上游是 Kimi 等 OpenAI-compatible 供应商时：
+
+- `messages[].content[].image_url` 中的 `data:image/...;base64,...` 会先上传到供应商 `/v1/files`（`purpose=vision`），再通过 `file_ids` 传给上游；不会把本地路径或 `[omitted_binary_payload]` 当作图片内容发送。
+- 长上下文会拆分为 `TOOL_GATEWAY_HISTORY.txt` 上传。为控制体积，最近 6 条历史完整保留，较早的大块内容只保留头尾并写入截断标记。
+- 工具定义会拆分为 `TOOL_GATEWAY_TOOLS.txt`。普通看图/问答不上传无关工具文件；明显需要工具时上传 compact 版全量工具（工具名 + 参数 schema + 工具调用格式，省略长 description）。
 
 #### 非流式响应
 
@@ -490,6 +498,8 @@ anthropic-version: 2023-06-01
 | `tool_choice` | string/object | ❌ | 支持 `auto` / `none` / `required` / `{"type":"function","name":"..."}`，并会转译为下游工具选择 |
 
 > 说明：上述 `thinking`、`temperature`、`top_p`、`stop_sequences`、`tool_choice` 都会走兼容层转译；最终是否生效仍取决于当前模型和上游能力。`temperature` 与 `top_p` 同时存在时，`temperature` 优先。
+>
+> 图片兼容：Claude `content` 中的 `{"type":"image","source":{"type":"base64",...}}` 会在 OpenAI-compatible / Kimi 外部供应商路径中转换为 OpenAI `image_url` data URL，并进一步上传到供应商 `/v1/files` 后通过 `file_ids` 传递，避免图片在历史上下文中退化为 `[omitted_binary_payload]`。
 
 #### 非流式响应
 

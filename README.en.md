@@ -137,13 +137,22 @@ For the full module-by-module architecture and directory responsibilities, see [
 | Unified CORS compatibility | `/v1/*`, `/anthropic/*`, `/v1beta/models/*`, `/api/*`, and `/admin/*` share one CORS policy; on Vercel, the Node Runtime for `/v1/chat/completions` mirrors the same relaxed preflight behavior for third-party clients |
 | Multi-account / credential scheduling | Managed upstream credentials, automatic account selection, queueing, and retry policy |
 | Concurrency control | Per-account in-flight limit + waiting queue, dynamic recommended concurrency |
-| Upstream adapters | Supports OpenAI-compatible upstreams and keeps pluggable room for web-chat/session-based providers |
-| Tool Calling | Anti-leak handling: non-code-block feature match, early `delta.tool_calls`, structured incremental output |
+| Upstream adapters | Supports OpenAI-compatible upstreams; Kimi-style providers convert inline images to `/v1/files` + `file_ids` |
+| Tool Calling | Anti-leak handling: non-code-block feature match, early `delta.tool_calls`, structured incremental output; external providers use auto + compact tool context |
 | Admin API | Config management, runtime settings hot-reload, proxy management, account testing/batch test, session cleanup, import/export, Vercel sync, version check |
 | WebUI Admin Panel | SPA at `/admin` (bilingual Chinese/English, dark mode, with server-side conversation history) |
 | Health Probes | `GET /healthz` (liveness), `GET /readyz` (readiness) |
 
 OpenAI `/v1/*` routes remain canonical, and Tool Gateway also accepts root shortcuts such as `/models`, `/chat/completions`, `/responses`, `/embeddings`, `/files`, and `/files/{file_id}` for clients configured with the bare service URL.
+
+### OpenAI-compatible / Kimi image and context handling
+
+For Kimi and similar OpenAI-compatible upstreams, Tool Gateway applies additional compatibility handling:
+
+- OpenAI `image_url` blocks and Claude `/v1/messages` `image` blocks are uploaded to the upstream `/v1/files` endpoint and then passed through `file_ids`, instead of degrading into local paths or `[omitted_binary_payload]` text.
+- Long context is split into `TOOL_GATEWAY_HISTORY.txt`; the latest 6 messages stay complete, while older large entries keep head/tail snippets with a truncation marker.
+- Tool schemas are split into `TOOL_GATEWAY_TOOLS.txt`; normal image/Q&A requests skip unrelated tools, while likely tool-use requests upload compact full tools (tool names + parameter schemas + tool-call format, without long descriptions).
+- Kimi requests skip unsupported sampling parameters in environments that reject fields such as `temperature` / `top_p`.
 
 ## Platform Compatibility Matrix
 
@@ -303,7 +312,7 @@ Common fields:
 - `model_aliases`: one shared alias map for OpenAI / Claude / Gemini model names.
 - `runtime`: account concurrency, queueing, and token refresh behavior, hot-reloadable via Admin Settings.
 - `auto_delete.mode`: remote session cleanup after each request, supporting `none` / `single` / `all`.
-- `current_input_file`: the global context split/upload mode; it is enabled by default and uploads the full context as a `TOOL_GATEWAY_HISTORY.txt` context file once the character threshold is reached.
+- `current_input_file`: the global context split/upload mode; it is enabled by default and uploads context as `TOOL_GATEWAY_HISTORY.txt` once the character threshold is reached. For external OpenAI-compatible upstreams, older large history entries are compacted while recent turns remain complete.
 - If you turn off `current_input_file`, requests pass through directly without uploading any split context file.
 
 For the full environment variable list, see [docs/DEPLOY.en.md](docs/DEPLOY.en.md). For auth behavior, see [API.en.md](API.en.md#authentication).
@@ -344,6 +353,7 @@ When `tools` is present in the request, Tool Gateway performs anti-leak handling
 3. `responses` streaming strictly uses official item lifecycle events (`response.output_item.*`, `response.content_part.*`, `response.function_call_arguments.*`)
 4. `responses` supports and enforces `tool_choice` (`auto`/`none`/`required`/forced function); `required` violations return `422` for non-stream and `response.failed` for stream
 5. The output protocol follows the client request (OpenAI / Claude / Gemini native shapes); model-side prompting can prefer XML, and the compatibility layer handles the protocol-specific translation
+6. External OpenAI-compatible upstreams receive tool schemas in `TOOL_GATEWAY_TOOLS.txt`; image/plain Q&A requests skip unrelated tools, and likely tool-use requests get compact full tools to reduce context size without over-filtering tool availability
 
 > Note: the current parser still prioritizes “parse successfully whenever possible”; hard allow-list rejection for undeclared tool names is not enabled yet.
 > Explicit empty strings or whitespace-only parameters are preserved by the parser; prompting tells the model not to emit blank parameters, and missing/empty argument rejection belongs in the tool executor or client schema validation.

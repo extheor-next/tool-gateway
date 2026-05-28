@@ -243,7 +243,15 @@ Content-Type: application/json
 | `messages` | array | ✅ | OpenAI-style messages |
 | `stream` | boolean | ❌ | Default `false` |
 | `tools` | array | ❌ | Function calling schema |
-| `temperature`, etc. | any | ❌ | Accepted but final behavior depends on upstream |
+| `temperature`, etc. | any | ❌ | Compatibility pass-through fields; final behavior depends on upstream. Kimi and similar OpenAI-compatible upstreams automatically skip unsupported sampling parameters. |
+
+#### OpenAI-compatible / Kimi image and context handling
+
+When the active upstream is Kimi or a similar OpenAI-compatible provider:
+
+- `messages[].content[].image_url` data URLs (`data:image/...;base64,...`) are uploaded to the upstream `/v1/files` endpoint with `purpose=vision`, then passed to the upstream through `file_ids`; local paths or `[omitted_binary_payload]` text are not treated as image content.
+- Long context is split into `TOOL_GATEWAY_HISTORY.txt`. To control file size, the latest 6 history entries stay complete, while older large entries keep head/tail snippets with a truncation marker.
+- Tool schemas are split into `TOOL_GATEWAY_TOOLS.txt`. Normal image/Q&A requests skip unrelated tools; likely tool-use requests upload compact full tools (tool name + parameter schema + tool-call format, without long descriptions).
 
 #### Non-Stream Response
 
@@ -485,6 +493,8 @@ anthropic-version: 2023-06-01
 | `tool_choice` | string/object | ❌ | Supports `auto` / `none` / `required` / `{"type":"function","name":"..."}` and is translated to downstream tool choice |
 
 > Note: `thinking`, `temperature`, `top_p`, `stop_sequences`, and `tool_choice` are translated through the compatibility bridge. Final behavior still depends on the selected model and upstream support. When both `temperature` and `top_p` are present, `temperature` takes precedence.
+>
+> Image compatibility: Claude `content` blocks such as `{"type":"image","source":{"type":"base64",...}}` are converted to OpenAI `image_url` data URLs on OpenAI-compatible / Kimi external upstream paths, then uploaded to the upstream `/v1/files` endpoint and passed through `file_ids`. This avoids degrading image payloads into `[omitted_binary_payload]` text in history context.
 
 #### Non-Stream Response
 

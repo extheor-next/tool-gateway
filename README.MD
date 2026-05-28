@@ -125,13 +125,22 @@ flowchart LR
 | 统一 CORS 兼容 | `/v1/*`、`/anthropic/*`、`/v1beta/models/*`、`/api/*`、`/admin/*` 统一走同一套 CORS 策略；Vercel 上 `/v1/chat/completions` 的 Node Runtime 也对齐相同放行规则，尽量减少第三方预检请求头限制 |
 | 多供应商管理 | 支持多个上游 AI 供应商（OpenAI / Claude / Gemini 等），可设置活跃供应商及每供应商并发限制 |
 | 上下文拆分 | 自动处理长对话上下文：DeepSeek / OpenAI 供应商上传为文件，Claude 供应商截断保留最近 N 条消息 |
-| 上游适配器 | 支持 OpenAI-compatible upstream，自动探测供应商模式（Auto/OpenAI/Claude/Gemini） |
-| Tool Calling | 防泄漏处理：非代码块高置信特征识别、`delta.tool_calls` 早发、结构化增量输出 |
+| 上游适配器 | 支持 OpenAI-compatible upstream，自动探测供应商模式（Auto/OpenAI/Claude/Gemini）；Kimi 等 OpenAI-compatible 供应商会把内联图片转换为 `/v1/files` + `file_ids` |
+| Tool Calling | 防泄漏处理：非代码块高置信特征识别、`delta.tool_calls` 早发、结构化增量输出；外部供应商使用 auto + compact 工具上下文，降低 `TOOL_GATEWAY_TOOLS.txt` 体积 |
 | Admin API | 配置管理、运行时设置热更新、代理管理、导入导出、Vercel 同步、版本检查 |
 | WebUI 管理台 | `/admin` 单页应用（中英文双语、深色模式，支持查看服务器端对话记录） |
 | 运维探针 | `GET /healthz`（存活）、`GET /readyz`（就绪） |
 
 OpenAI `/v1/*` 仍是推荐的规范路径；同时支持 `/models`、`/chat/completions`、`/responses`、`/embeddings`、`/files`、`/files/{file_id}` 等根路径快捷路由，方便只配置 Tool Gateway 根地址的第三方客户端。
+
+### OpenAI-compatible / Kimi 图片与上下文适配
+
+针对 Kimi 等 OpenAI-compatible 供应商，Tool Gateway 会做额外兼容处理：
+
+- OpenAI `image_url` 与 Claude `/v1/messages` 的 `image` block 会转换为供应商 `/v1/files` 上传，并通过 `file_ids` 传给上游，避免只把本地路径或 `[omitted_binary_payload]` 写进 prompt。
+- 长上下文会拆到 `TOOL_GATEWAY_HISTORY.txt`，并对旧的大块历史做低风险压缩；最近 6 条消息仍完整保留。
+- 工具定义会拆到 `TOOL_GATEWAY_TOOLS.txt`；看图/普通问答默认不上传工具文件，明显需要工具时上传 compact 版全量工具。
+- Kimi 请求不会转发其不支持的采样参数（如部分环境中的 `temperature` / `top_p`），减少上游 `Unsupported parameter` 错误。
 
 ## 平台兼容矩阵
 
@@ -287,7 +296,7 @@ go run ./cmd/tool-gateway
 - `model_aliases`：OpenAI / Claude / Gemini 共用的模型 alias 映射。
 - `runtime`：全局并发上限，可通过 Admin Settings 热更新。
 - `auto_delete.mode`：请求结束后的远端会话清理策略，支持 `none` / `single` / `all`。
-- `current_input_file`：全局生效的上下文拆分策略；默认开启，阈值 `min_chars` 为 `0`。DeepSeek / OpenAI 兼容供应商会将完整上下文上传为 `TOOL_GATEWAY_HISTORY.txt` 文件；Claude 供应商（无 Files API）则截断保留最近 `max_keep_messages`（默认 40）条消息。
+- `current_input_file`：全局生效的上下文拆分策略；默认开启，阈值 `min_chars` 为 `0`。DeepSeek / OpenAI 兼容供应商会将上下文上传为 `TOOL_GATEWAY_HISTORY.txt` 文件；Claude 供应商（无 Files API）则截断保留最近 `max_keep_messages`（默认 40）条消息。外部 OpenAI-compatible 供应商会对历史文件做低风险压缩：最近 6 条完整保留，较早的大块内容只保留头尾并标记截断。
 
 - `thinking_injection`：默认开启；在最新 user 消息末尾追加思考增强提示词，提高高强度推理与工具调用前的思考稳定性；`prompt` 留空时使用内置默认提示词。
 
@@ -317,6 +326,7 @@ Gemini 路由还可以使用 `x-goog-api-key`，或在没有认证头时使用 `
 3. `responses` 流式严格使用官方 item 生命周期事件（`response.output_item.*`、`response.content_part.*`、`response.function_call_arguments.*`）
 4. `responses` 支持并执行 `tool_choice`（`auto`/`none`/`required`/强制函数）；`required` 违规时非流式返回 `422`，流式返回 `response.failed`
 5. 客户端请求哪种协议，就按该协议返回工具调用（OpenAI/Claude/Gemini 各自原生结构）；模型侧优先约束输出规范 XML，再由兼容层转译
+6. 外部 OpenAI-compatible 供应商使用独立的 `TOOL_GATEWAY_TOOLS.txt` 承载工具 schema 与工具调用格式；普通看图/问答不会上传无关工具文件，明显需要工具时上传 compact 版全量工具（保留工具名与参数 schema，省略长 description），降低误判漏工具和上下文体积
 
 > 说明：当前版本 parser 层以”尽量解析成功”为优先，所有格式合法的 XML 工具调用都会通过，不做工具名 allow-list 过滤。
 > 解析层会保留显式空字符串或纯空白参数；Prompt 会要求模型不要主动输出空参数，缺参/空命令的拒绝应由工具执行侧或客户端 schema 校验负责。
